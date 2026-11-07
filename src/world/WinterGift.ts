@@ -43,7 +43,7 @@ export function openWinterGift(base: GiftConfig, world: WorldConfig, mode: GiftM
     if (!validGiftDetails(migrated.details) || !validGiftContent(migrated.object_contents[letterId])) return canonical;
     return new GiftStore(migrated, world, mode, storage);
   } catch {
-    canonical.warning = "旧草稿无法读取，已展示现有礼物内容。";
+    canonical.warning = "保存记录无法读取，已显示默认内容。";
     return canonical;
   }
 }

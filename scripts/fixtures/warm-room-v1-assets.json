@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "assets": [
+    { "asset_id": "room_warm_01", "path": "/assets/warm-room-v1/room_warm_01.png", "type": "background", "width": 1536, "height": 1024, "has_alpha": false, "alpha_bounds": null, "default_anchor": { "x": 0, "y": 0 }, "default_size": { "width": 1 } },
+    { "asset_id": "armchair_sage_01", "path": "/assets/warm-room-v1/armchair_sage_01.png", "type": "furniture", "width": 1536, "height": 1024, "has_alpha": true, "alpha_bounds": [31, 19, 1506, 959], "default_anchor": { "x": 0.5, "y": 1 }, "default_size": { "width": 0.33 } },
+    { "asset_id": "cat_orange_01", "path": "/assets/warm-room-v1/cat_orange_01.png", "type": "pet", "width": 1536, "height": 1024, "has_alpha": true, "alpha_bounds": [0, 30, 1480, 1024], "default_anchor": { "x": 0.5, "y": 1 }, "default_size": { "width": 0.17 } },
+    { "asset_id": "memory_shell_01", "path": "/assets/warm-room-v1/memory_shell_01.png", "type": "memory", "width": 1536, "height": 1024, "has_alpha": true, "alpha_bounds": [0, 20, 1514, 1024], "default_anchor": { "x": 0.5, "y": 0.5 }, "default_size": { "width": 0.075 } },
+    { "asset_id": "memory_frame_01", "path": "/assets/warm-room-v1/memory_frame_01.png", "type": "memory", "width": 1536, "height": 1024, "has_alpha": true, "alpha_bounds": [0, 41, 1508, 989], "default_anchor": { "x": 0.5, "y": 1 }, "default_size": { "width": 0.095 } },
+    { "asset_id": "memory_letter_01", "path": "/assets/warm-room-v1/memory_letter_01.png", "type": "memory", "width": 1536, "height": 1024, "has_alpha": true, "alpha_bounds": [0, 0, 1442, 1024], "default_anchor": { "x": 0.5, "y": 0.5 }, "default_size": { "width": 0.1 } }
+  ]
+}

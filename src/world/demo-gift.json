@@ -3,7 +3,16 @@
   "gift_id": "warm-room-gift-v1",
   "world_id": "warm-room-demo-v1",
   "object_contents": {
-    "sunset-frame": { "kind": "photo_frame", "photo": null, "zoom": 1, "position_x": 0.5, "position_y": 0.5 },
-    "sealed-letter": { "kind": "letter", "body": "亲爱的你：\n\n愿这间小屋，为你留住生活里的温柔。\n愿窗边的阳光、小橘的陪伴，还有一起看过的日落，能在忙碌的时候给你一点力量。\n\n愿你知道，自己一直被惦念。" }
+    "sunset-frame": {
+      "kind": "photo_frame",
+      "photo": null,
+      "zoom": 1,
+      "position_x": 0.5,
+      "position_y": 0.5
+    },
+    "sealed-letter": {
+      "kind": "letter",
+      "body": "这是一封示例信件。"
+    }
   }
 }

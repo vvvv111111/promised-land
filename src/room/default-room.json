@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "everyday-room-v1",
+  "seed": 42,
+  "dimensions": [6, 3, 4.8],
+  "materials": {
+    "wood": { "color": "#ffffff", "roughness": 0.6, "texture": { "kind": "wood", "color": "#bfa17c" } },
+    "paleWood": { "color": "#ffffff", "roughness": 0.68, "texture": { "kind": "wood", "color": "#d4bb98" } },
+    "darkWood": { "color": "#80644b", "roughness": 0.72 },
+    "plaster": { "color": "#ede9dd", "roughness": 0.8 },
+    "trim": { "color": "#dad5c5", "roughness": 0.65 },
+    "sofaFabric": { "color": "#ffffff", "roughness": 0.94, "texture": { "kind": "cloth", "color": "#83917c" } },
+    "creamFabric": { "color": "#ffffff", "roughness": 0.95, "texture": { "kind": "cloth", "color": "#ded8c7" } },
+    "rugFabric": { "color": "#ffffff", "roughness": 1, "texture": { "kind": "cloth", "color": "#c6b99f" } },
+    "paper": { "color": "#efeadc", "roughness": 0.8 },
+    "terracotta": { "color": "#a5684d", "roughness": 0.8 },
+    "green": { "color": "#536950", "roughness": 0.8 },
+    "ceramic": { "color": "#c9c7af", "roughness": 0.27 },
+    "brass": { "color": "#8c7956", "roughness": 0.36 },
+    "ink": { "color": "#403e34", "roughness": 0.8 }
+  },
+  "nodes": [
+    { "id": "shell", "model": "shell", "position": [0, 0, 0] },
+    { "id": "sofa", "model": "sofa", "position": [-1.35, 0, -1.53] },
+    { "id": "rug", "model": "rug", "position": [0, 0, 0] },
+    { "id": "table", "model": "table", "position": [-0.65, 0, 0.3], "rotation": [0, -0.13, 0], "surfaces": [{ "id": "top", "position": [0, 0.6425, 0], "size": [1.66, 0.96] }] },
+    { "id": "cd", "model": "cd", "parent": "table", "surface": "top", "position": [0.38, 0.648, -0.18], "rotation": [0, 0.04, 0], "interaction": "cd-player" },
+    { "id": "envelope", "model": "envelope", "parent": "table", "surface": "top", "position": [0.1, 0.652, 0.18], "rotation": [0, -0.16, 0], "interaction": "sealed-letter" },
+    { "id": "cabinet", "model": "cabinet", "position": [1.66, 0, -1.97], "surfaces": [{ "id": "top", "position": [0, 1.0725, 0], "size": [1.96, 0.68] }] },
+    { "id": "frame", "model": "frame", "parent": "cabinet", "surface": "top", "position": [-0.39, 1.43, 0.01], "rotation": [-0.13, -0.15, 0], "interaction": "sunset-frame" },
+    { "id": "lamp", "model": "lamp", "parent": "cabinet", "surface": "top", "position": [0.6, 1.08, 0], "interaction": "lamp" },
+    { "id": "floor-plant", "model": "plant", "position": [2.55, 0.04, -0.67], "scale": [1.2, 1.2, 1.2] },
+    { "id": "window-plant", "model": "plant", "position": [-2.78, 1.03, -0.99], "scale": [0.43, 0.43, 0.43] },
+    { "id": "clock", "model": "clock", "position": [0, 0, 0] },
+    { "id": "pet", "model": "pet", "position": [1.1, 0.07, 1.28], "rotation": [0, 2.25, 0] },
+    { "id": "slippers", "model": "slippers", "position": [-1.9, 0.06, 1.95], "rotation": [0, -0.3, 0] }
+  ],
+  "lighting": {
+    "background": "#f7f4ed", "exposure": 1.12, "environment": 0.25,
+    "sky": "#eff3f0", "ground": "#9b8b71", "ambient": 2,
+    "sun": { "color": "#ffefd3", "intensity": 3.5, "position": [-3.8, 6.5, 3], "target": [0.5, 0, -0.6] }
+  },
+  "camera": { "fov": 35, "target": [0, 1, 0], "direction": [0.84, 0.72, 1.15], "minDistance": 7, "maxDistance": 24, "fitWidth": 7.1, "defaultDistance": 12, "maxFitDistance": 23 }
+}

@@ -78,9 +78,6 @@ export interface RoomRendererOptions {
   world: WorldConfig;
   manifest: AssetManifest;
   onInteract: (target: RoomTarget) => void;
-  positions: Record<string, Anchor>;
-  allowDrag?: boolean;
-  onMove: (id: string, position: Anchor) => void;
   onReady: () => void;
   onError: (message: string) => void;
 }

@@ -5,7 +5,9 @@ require('node:child_process').execFileSync(process.execPath, [path.join(root, 'n
   'src/world/RoomPlacement.ts', 'src/world/config.ts', '--ignoreConfig', '--outDir', '.room-qa/placement-state',
   '--module', 'node16', '--target', 'es2020', '--moduleResolution', 'node16', '--esModuleInterop', '--resolveJsonModule', '--skipLibCheck'], { cwd: root, stdio: 'inherit' });
 const { RoomPlacement, surfaceToScreen, screenToSurface, insidePolygon, polygonsOverlap } = require('../.room-qa/placement-state/RoomPlacement.js');
-const { demoWorld: world, assetManifest, validateWorldConfig } = require('../.room-qa/placement-state/config.js');
+const { validateWorldConfig } = require('../.room-qa/placement-state/config.js');
+const world = require("./fixtures/warm-room-v1.json");
+const assetManifest = require("./fixtures/warm-room-v1-assets.json");
 const model = () => new RoomPlacement(world, assetManifest);
 const check = m => {
   for (const o of world.objects) {

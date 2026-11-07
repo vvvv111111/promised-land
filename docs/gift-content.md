@@ -41,7 +41,7 @@
 
 `photo` 为上传后处理得到的图片 data URL；为空时弹窗展示已有的日落相框 PNG。小房间中的立体相框仍使用队友原始素材，私人照片在放大弹窗中展示，不覆盖或修改该 PNG。
 
-`GiftStore` 按 `promised-land:gift:<gift_id>` 保存完整礼物内容配置。相框和信件分别按 `object_id` 更新，互不覆盖；不同 gift_id 的内容相互隔离。读入时校验礼物和房间身份、内容类型、字段范围与数据 URL。房间摆放单独保存。收集模式已停用，旧收集记录不会影响物品外观与点击。
+`GiftStore` 按 `promised-land:gift:<gift_id>` 保存完整礼物内容配置。相框和信件分别按 `object_id` 更新，互不覆盖；不同 gift_id 的内容相互隔离。读入时校验礼物和房间身份、内容类型、字段范围与数据 URL。房间物品固定，位置缓存不再读写。收集模式已停用，旧收集记录不会影响物品外观与点击。
 
 只有 sender 模式的写入方法可以保存。浏览器存储不可用或超出配额时，弹窗明确显示失败，不会把失败草稿当作已保存结果，也不会覆盖之前的已保存配置；关闭时需先重试保存或点击「放弃未保存更改」。
 
@@ -53,9 +53,9 @@
 - `src/world/demo-gift.json`：默认礼物文案与相框配置。
 - `src/world/GiftStore.ts`：配置持久化、校验、按礼物隔离、只读写入保护。
 - `src/components/world/GiftContentDialog.tsx`：原生 dialog 弹窗、编辑/只读界面、自动保存和失败提示。
-- `src/components/world/preparePhoto.ts`：文件校验、本地解码和照片尺寸处理。
+- `src/lib/media/photos.ts`：共用照片处理，`prepareFramePhoto` 保留相框入口原有文件限制和压缩策略。
 - `src/components/world/WorldDemo.tsx`：模式、专属物体点击及礼物配置连接。
-- `src/game/scenes/WorldDemoScene.ts`：收礼者禁用拖动；原交互保持。
+- `src/game/scenes/WorldDemoScene.ts`：物品固定；原点击交互保持。
 - `src/world/config.ts`、`demo-world.json`：content_type 配置与校验。
 - `src/app/globals.css`：相框、信纸、弹窗及手机适配。
 
@@ -67,4 +67,4 @@ npm run typecheck
 npm run build
 ```
 
-浏览器检查脚本 `scripts/check-gift-browser.cjs` 使用既有 Playwright，环境配置同房间验收脚本。测试使用合成照片，不读取个人文件。覆盖画布点开相框、照片上传/更换/缩放/位置、保存后关闭及刷新恢复、信件自动保存与显式保存、收礼者无编辑控件、不同礼物隔离、非法图片不覆盖旧数据、存储失败无假成功及手机弹窗。还回归原房间与拖动测试。
+浏览器检查脚本 `scripts/check-gift-browser.cjs` 使用既有 Playwright，环境配置同房间验收脚本。测试使用合成照片，不读取个人文件。覆盖画布点开相框、照片上传/更换/缩放/位置、保存后关闭及刷新恢复、信件自动保存与显式保存、收礼者无编辑控件、不同礼物隔离、非法图片不覆盖旧数据、存储失败无假成功及手机弹窗。另由固定房间测试验证位置缓存不会影响画面。

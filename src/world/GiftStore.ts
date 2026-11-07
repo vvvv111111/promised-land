@@ -37,15 +37,15 @@ export class GiftStore {
           if (validGiftContent(content) && content.kind === object.content_type) this.config.object_contents[object.object_id] = structuredClone(content);
         }
       }
-    } catch { this.warning = "礼物记录无法读取，已展示默认内容。"; }
+    } catch { this.warning = "保存记录无法读取，已显示默认内容。"; }
   }
 
   read(): GiftConfig { return structuredClone(this.config); }
 
   save(objectId: string, content: GiftContent): GiftConfig {
-    if (this.mode !== "sender") throw new Error("收礼者模式不能编辑礼物内容。");
+    if (this.mode !== "sender") throw new Error("当前无法保存此内容，请重新打开后重试。");
     const object = this.world.objects.find(o => o.object_id === objectId);
-    if (!validGiftContent(content) || object?.content_type !== content.kind) throw new Error("编辑内容格式无效。");
+    if (!validGiftContent(content) || object?.content_type !== content.kind) throw new Error("当前无法保存此内容，请重新打开后重试。");
     const next = structuredClone(this.config);
     next.object_contents[objectId] = structuredClone(content);
     return this.saveGift(next);
@@ -53,18 +53,18 @@ export class GiftStore {
 
   /** Validate and commit the entire document with one atomic storage write. */
   saveGift(next: GiftConfig): GiftConfig {
-    if (this.mode !== "sender") throw new Error("收礼者模式不能编辑礼物内容。");
+    if (this.mode !== "sender") throw new Error("当前无法保存此内容，请重新打开后重试。");
     if (next.version !== 1 || next.gift_id !== this.config.gift_id || next.world_id !== this.world.world_id
       || !next.object_contents || typeof next.object_contents !== "object"
-      || (next.details !== undefined && !validGiftDetails(next.details))) throw new Error("编辑内容格式无效。");
+      || (next.details !== undefined && !validGiftDetails(next.details))) throw new Error("当前无法保存此内容，请重新打开后重试。");
     for (const [id, content] of Object.entries(next.object_contents)) {
-      if (!validGiftContent(content) || this.world.objects.find(o => o.object_id === id)?.content_type !== content.kind) throw new Error("编辑内容格式无效。");
+      if (!validGiftContent(content) || this.world.objects.find(o => o.object_id === id)?.content_type !== content.kind) throw new Error("当前无法保存此内容，请重新打开后重试。");
     }
-    if (Object.keys(this.config.object_contents).some(id => !(id in next.object_contents))) throw new Error("编辑内容格式无效。");
-    if (!this.storage) throw new Error("浏览器未开放本地存储，无法保存。请允许站点存储后重试。");
+    if (Object.keys(this.config.object_contents).some(id => !(id in next.object_contents))) throw new Error("当前无法保存此内容，请重新打开后重试。");
+    if (!this.storage) throw new Error("浏览器无法保存数据，请允许本地存储后重试。");
     const committed = structuredClone(next);
     try { this.storage.setItem(this.storageKey, JSON.stringify(committed)); }
-    catch { throw new Error("保存失败：浏览器存储空间不足或不可写。请更换较小的照片后重试。"); }
+    catch { throw new Error("保存失败。输入已暂留，请检查浏览器存储或减少照片大小后重试。"); }
     this.config = committed;
     this.warning = "";
     return this.read();

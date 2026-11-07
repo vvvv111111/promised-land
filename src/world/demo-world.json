@@ -12,8 +12,8 @@
       "size": {
         "width": 0.33
       },
-      "visible": true,
-      "clickable": true,
+      "visible": false,
+      "clickable": false,
       "interaction": {
         "title": "鼠尾草扶手椅",
         "description": "靠窗留一把柔软的椅子，让忙碌的一天在这里慢下来。"

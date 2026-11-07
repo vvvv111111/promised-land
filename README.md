@@ -1,77 +1,43 @@
-# 应许之地
+# 应许之地 / promised land
 
-2.5D 私人定制数字礼物产品。使用 Next.js、TypeScript、App Router 和 Phaser 3，包含首页和由 JSON 驱动的可交互房间 Demo。
+私人定制数字礼物原型。Next.js、TypeScript、Phaser 与 Three.js。
 
-## 启动
+## 启动与检查
 
-环境要求：Node.js 20.9 或更高版本、npm。
-
-在本目录打开终端，执行：
+环境：Node.js 20.9 以上、npm。
 
 ```powershell
 npm install
 npm run dev
 ```
 
-浏览器打开 http://localhost:3000。若 3000 端口被占用，以终端输出地址为准。
-
-## 检查运行结果
-
-1. 首页显示「应许之地」和「进入世界演示」入口。
-2. 点击入口或直接打开 http://localhost:3000/world-demo。
-3. 演示页显示真实暖色房间、猫咪、扶手椅和三件纪念物；点击物件与背景里的书架、边桌、台灯可查看介绍。
-4. 贝壳、相框、信封均可反复点击：贝壳显示介绍，相框与信件打开专属弹窗。物体保持原本外观，不显示收集进度或标记。
-5. 调整浏览器窗口，确认物体与背景对齐。也可展开「用按钮探索房间」进行键盘操作。
-   按住猫咪、扶手椅或纪念物拖动可调整摆放；位置会保存在当前浏览器。点击「恢复默认摆放」返回 JSON 位置，不改变已保存的照片和信件。
-6. 点击「返回首页」，再进入演示页，确认画布正常加载且没有重复出现。
-
-## 构建检查
+默认地址：http://localhost:3000。
 
 ```powershell
+npm run typecheck
+npm test
 npm run build
+npm run start
 ```
 
-类型检查可单独执行 `npm run typecheck`。构建通过后，可以用 `npm run start` 启动生产服务。
+## 当前功能
 
-## 目录
+- `/`、`/gift/[step]`：制作、模拟生成、编辑、完成、开启、探索和回忆的八页流程。照片和信件以完整礼物保存；失败保留旧记录。
+- 八页流程与 `/world-demo` 沿用 main 原有房间。物品固定，没有介绍面板、拖动摆放或独立小扶手椅。
+- `/room-3d`：独立的真实 3D 预览。支持旋转缩放、物品点击特写、照片/信件查看、台灯以及 CD 音乐或已有录音文件上传、保存和播放。
+- 统一暖白与绿色、统一字体。保留水晶球与已确认简短文案。
+- 分享位置已预留，复制按钮禁用。尚未接入真实生成、Agent、服务端、跨设备分享或部署。
 
-```text
-src/
-  app/
-    globals.css                 全局样式
-    layout.tsx                  根布局和页面元信息
-    page.tsx                    首页 /
-    world-demo/page.tsx         世界演示 /world-demo
-  components/world/
-    WorldDemo.tsx               Phaser 挂载销毁、介绍面板和内容弹窗
-  game/
-    createWorldGame.ts          Phaser 游戏配置
-    scenes/WorldDemoScene.ts    数据驱动场景、点击、拖动和遮挡
-  world/
-    types.ts                   配置、素材和运行状态类型
-    asset-manifest.json        统一运行素材索引
-    demo-world.json            可编辑测试房间
-    config.ts                  配置加载和运行时校验
-    RoomSession.ts             可重复触发的物品介绍状态
-public/assets/                 队友原始视觉素材（保留）
-scripts/check-room-state.cjs    状态与配置校验测试
-scripts/check-room-browser.cjs  可选浏览器验收（需已有 Playwright）
-docs/room-demo.md               素材审计、配置规范、验收说明
-```
+V004 的 2.5D 房间、配套素材和独立相册未纳入本次 main 集成，具体范围见 [集成记录](docs/main-integration.md)。
 
-依赖版本由 `package.json` 和 `package-lock.json` 记录。Phaser 运行时代码仅在浏览器端动态导入。当前使用普通 CSS，未接入 AI、数据库或其他业务。
+## 代码与验证
 
-房间配置、新增物体方法和测试结果见 [房间 Demo 开发说明](docs/room-demo.md)。
+目录职责、数据流、事件流和房间 JSON 契约见 [代码整理说明](docs/code-organization.md)；3D 功能与限制见 [3D 预览说明](docs/room-3d.md)。
 
-摆放已加入地板/桌面支撑、家具占地碰撞和固定家具前景遮挡。猫与扶手椅只能落地，小物件可以放到边桌的空位；物品保持现有等距素材比例。参数和限制见 [物理摆放说明](docs/placement.md)。
+`npm test` 汇总礼物、原房间配置/历史摆放、镜头、房间数据、模型资源释放和照片处理测试。
 
-相框与信件支持专属弹窗：默认赠送者模式可上传/更换照片、调整取景和编辑正文；编辑自动保存，也可点「保存编辑」。点击「预览收礼者模式」只读查看。礼物内容按 `gift_id` 保存在当前浏览器的礼物配置中，刷新或关闭弹窗后恢复。详见 [礼物内容说明](docs/gift-content.md)。
+浏览器测试使用已有 Playwright，设置 `ROOM_URL`、`ROOM_CHROMIUM`，礼物脚本同时设置 `GIFT_URL`。`check-room-browser.cjs` 包含临时修改 JSON 的测试，需要开发服务器，结束后恢复配置。其他回归可在生产服务上运行。截图与测试输出保存在 Git 忽略的 `.room-qa/`。
 
-## 开发文档
+项目记录：`今日待办_2026-11-06.md`、`应许之地_开发节点表.html`。
 
-- `今日待办_2026-11-06.md`：今天的任务顺序、准备事项和验收条件。
-- `应许之地_开发节点表.html`：原始开发计划的本地副本。
-
-GitHub 仓库：https://github.com/vvvv111111/promised-land
-
-本地 Git 分支为 `main`，远程 `origin` 已配置为上述仓库。本次初始化不自动提交或推送代码。
+仓库：https://github.com/vvvv111111/promised-land 。本轮只合入本地 main，不自动推送。

@@ -1,6 +1,6 @@
 import type { Anchor, WorldConfig, WorldObject } from "./types";
 
-/** Saved placement applies only while the object's JSON defaults still match. */
+/** Historical placement persistence; no active page imports this class. */
 export class RoomLayout {
   private entries: Record<string, { basis: string; position: Anchor }> = {};
   warning = "";
