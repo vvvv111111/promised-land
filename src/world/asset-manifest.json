@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "asset_id": "room_warm_01",
+      "path": "/assets/warm-room-v1/room_warm_01.png",
+      "type": "background",
+      "width": 1536,
+      "height": 1024,
+      "has_alpha": false,
+      "alpha_bounds": null,
+      "default_anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "default_size": {
+        "width": 1
+      }
+    },
+    {
+      "asset_id": "armchair_sage_01",
+      "path": "/assets/normalized-v003/furniture_armchair01_v003.png",
+      "type": "furniture",
+      "width": 1536,
+      "height": 1024,
+      "has_alpha": true,
+      "alpha_bounds": [
+        348,
+        48,
+        1143,
+        974
+      ],
+      "default_anchor": {
+        "x": 0.4853515625,
+        "y": 0.951171875
+      },
+      "default_size": {
+        "width": 0.33
+      }
+    },
+    {
+      "asset_id": "cat_orange_01",
+      "path": "/assets/normalized-v003/pet_cat01_v003.png",
+      "type": "pet",
+      "width": 1536,
+      "height": 1024,
+      "has_alpha": true,
+      "alpha_bounds": [
+        402,
+        68,
+        1153,
+        957
+      ],
+      "default_anchor": {
+        "x": 0.5061848958333334,
+        "y": 0.9345703125
+      },
+      "default_size": {
+        "width": 0.17
+      }
+    },
+    {
+      "asset_id": "memory_shell_01",
+      "path": "/assets/normalized-v003/memory_shell01_v003.png",
+      "type": "memory",
+      "width": 1536,
+      "height": 1024,
+      "has_alpha": true,
+      "alpha_bounds": [
+        345,
+        167,
+        1201,
+        852
+      ],
+      "default_anchor": {
+        "x": 0.5032552083333334,
+        "y": 0.83203125
+      },
+      "default_size": {
+        "width": 0.075
+      }
+    },
+    {
+      "asset_id": "memory_frame_01",
+      "path": "/assets/normalized-v003/memory_frame01_v003.png",
+      "type": "memory",
+      "width": 1536,
+      "height": 1024,
+      "has_alpha": true,
+      "alpha_bounds": [
+        318,
+        75,
+        1208,
+        949
+      ],
+      "default_anchor": {
+        "x": 0.4967447916666667,
+        "y": 0.9267578125
+      },
+      "default_size": {
+        "width": 0.095
+      }
+    },
+    {
+      "asset_id": "memory_letter_01",
+      "path": "/assets/normalized-v003/memory_envelope01_v003.png",
+      "type": "memory",
+      "width": 1536,
+      "height": 1024,
+      "has_alpha": true,
+      "alpha_bounds": [
+        158,
+        130,
+        1326,
+        933
+      ],
+      "default_anchor": {
+        "x": 0.4830729166666667,
+        "y": 0.9111328125
+      },
+      "default_size": {
+        "width": 0.1
+      }
+    },
+    {
+      "asset_id": "room_warm_04",
+      "path": "/assets/warm-room-v004/background.png",
+      "type": "background",
+      "width": 1672,
+      "height": 941,
+      "has_alpha": false,
+      "alpha_bounds": null,
+      "default_anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "default_size": {
+        "width": 1
+      }
+    }
+  ]
+}

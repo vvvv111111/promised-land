@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "world_id": "warm-room-demo-v1",
+  "background_id": "room_warm_04",
+  "objects": [
+    {
+      "object_id": "sage-chair",
+      "asset_id": "armchair_sage_01",
+      "type": "furniture",
+      "position_x": 0.7645833333333333,
+      "position_y": 0.8907407407407407,
+      "size": {
+        "width": 0.20528301886792452,
+        "height_scale": 1
+      },
+      "visible": true,
+      "clickable": true,
+      "interaction": {
+        "title": "鼠尾草扶手椅",
+        "description": "靠窗留一把柔软的椅子，让忙碌的一天在这里慢下来。"
+      }
+    },
+    {
+      "object_id": "orange-cat",
+      "asset_id": "cat_orange_01",
+      "type": "pet",
+      "position_x": 0.625,
+      "position_y": 0.8425925925925926,
+      "size": {
+        "width": 0.15978695073235685,
+        "height_scale": 1
+      },
+      "visible": true,
+      "clickable": true,
+      "interaction": {
+        "title": "橘白猫 · 小橘",
+        "description": "这个家的小小陪伴者。喜欢窗边的阳光，也喜欢安静地等你回家。"
+      }
+    },
+    {
+      "object_id": "seaside-shell",
+      "asset_id": "memory_shell_01",
+      "type": "memory",
+      "position_x": 0.375,
+      "position_y": 0.6277777777777778,
+      "size": {
+        "width": 0.0411214953271028,
+        "height_scale": 0.8
+      },
+      "visible": true,
+      "clickable": true,
+      "interaction": {
+        "title": "海边的贝壳",
+        "description": "一起走过海边时留下的纪念，仿佛还能听见那天的海浪。"
+      }
+    },
+    {
+      "object_id": "sunset-frame",
+      "content_type": "photo_frame",
+      "asset_id": "memory_frame_01",
+      "type": "memory",
+      "position_x": 0.8614583333333333,
+      "position_y": 0.6018518518518519,
+      "size": {
+        "width": 0.06292134831460675,
+        "height_scale": 1
+      },
+      "visible": true,
+      "clickable": true,
+      "interaction": {
+        "title": "日落相框",
+        "description": "一张关于日落的照片，装着值得反复想起的温柔时刻。"
+      }
+    },
+    {
+      "object_id": "sealed-letter",
+      "content_type": "letter",
+      "asset_id": "memory_letter_01",
+      "type": "memory",
+      "position_x": 0.4583333333333333,
+      "position_y": 0.6074074074074074,
+      "size": {
+        "width": 0.04657534246575342,
+        "height_scale": 0.6
+      },
+      "visible": true,
+      "clickable": true,
+      "interaction": {
+        "title": "写给你的信",
+        "description": "有些话想慢慢告诉你。这封信记录着赠礼者最真诚的祝福。"
+      }
+    }
+  ],
+  "hotspots": [
+    {
+      "hotspot_id": "bookshelf",
+      "furniture_name": "书架",
+      "position_x": 0.33229166666666665,
+      "position_y": 0.17037037037037037,
+      "width": 0.12083333333333333,
+      "height": 0.3296296296296296,
+      "interaction": {
+        "title": "窗边书架",
+        "description": "书本、陶罐与绿叶各有位置，也为未来的故事留了一格。"
+      }
+    },
+    {
+      "hotspot_id": "side-table",
+      "furniture_name": "边桌",
+      "position_x": 0.8333333333333334,
+      "position_y": 0.5592592592592592,
+      "width": 0.08333333333333333,
+      "height": 0.1574074074074074,
+      "interaction": {
+        "title": "木质边桌",
+        "description": "一张安稳的小桌，接住手边的琐碎，也接住日常的温暖。"
+      }
+    },
+    {
+      "hotspot_id": "table-lamp",
+      "furniture_name": "台灯",
+      "position_x": 0.871875,
+      "position_y": 0.3592592592592593,
+      "width": 0.0625,
+      "height": 0.18518518518518517,
+      "interaction": {
+        "title": "暖光台灯",
+        "description": "天色暗下来时，这里仍会为你留一盏灯。"
+      }
+    },
+    {
+      "hotspot_id": "oven",
+      "furniture_name": "烤箱",
+      "position_x": 0.5125,
+      "position_y": 0.41203703703703703,
+      "width": 0.08125,
+      "height": 0.1388888888888889,
+      "interaction": {
+        "title": "烤箱",
+        "description": "烤箱里透出暖光，像是刚烤好一炉面包。"
+      }
+    },
+    {
+      "hotspot_id": "fridge",
+      "furniture_name": "冰箱",
+      "position_x": 0.8109375,
+      "position_y": 0.23703703703703705,
+      "width": 0.08229166666666667,
+      "height": 0.35185185185185186,
+      "interaction": {
+        "title": "冰箱",
+        "description": "奶油色冰箱里，留着明天早餐的食材。"
+      }
+    },
+    {
+      "hotspot_id": "window",
+      "furniture_name": "窗户",
+      "position_x": 0.10416666666666667,
+      "position_y": 0.10925925925925926,
+      "width": 0.1875,
+      "height": 0.3148148148148148,
+      "interaction": {
+        "title": "窗户",
+        "description": "午后的阳光穿过木窗，树影落在地板上。"
+      }
+    }
+  ]
+}

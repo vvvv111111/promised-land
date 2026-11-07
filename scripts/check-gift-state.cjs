@@ -1,0 +1,33 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const root = path.join(__dirname, '..');
+require('node:child_process').execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'),
+  'src/world/GiftStore.ts', 'src/world/config.ts', '--ignoreConfig', '--outDir', '.room-qa/gift-state',
+  '--module', 'node16', '--target', 'es2020', '--moduleResolution', 'node16', '--esModuleInterop', '--resolveJsonModule', '--skipLibCheck'], { cwd: root, stdio: 'inherit' });
+const { GiftStore, validGiftContent } = require('../.room-qa/gift-state/GiftStore.js');
+const world = require('../src/world/demo-world.json');
+const base = require('../src/world/demo-gift.json');
+const records = new Map();
+const storage = { getItem: k => records.get(k) ?? null, setItem: (k, v) => records.set(k, v) };
+const letterId = world.objects.find(o => o.content_type === 'letter').object_id;
+const frameId = world.objects.find(o => o.content_type === 'photo_frame').object_id;
+const sender = new GiftStore(base, world, 'sender', storage);
+sender.save(letterId, { kind: 'letter', body: '亲爱的你：\n愿你开心。<script>不会执行</script>' });
+assert.match(new GiftStore(base, world, 'recipient', storage).read().object_contents[letterId].body, /愿你开心/);
+const frame = { kind: 'photo_frame', photo: 'data:image/jpeg;base64,/9j/AA==', zoom: 1.8, position_x: 0.2, position_y: 0.7 };
+sender.save(frameId, frame);
+assert.deepEqual(new GiftStore(base, world, 'sender', storage).read().object_contents[frameId], frame);
+assert.match(sender.read().object_contents[letterId].body, /愿你开心/);
+assert.throws(() => new GiftStore(base, world, 'recipient', storage).save(letterId, { kind: 'letter', body: '不允许' }), /不能编辑/);
+assert.throws(() => sender.save(letterId, frame), /格式无效/);
+assert.equal(validGiftContent({ ...frame, photo: 'javascript:alert(1)' }), false);
+assert.equal(validGiftContent({ ...frame, zoom: 9 }), false);
+assert.equal(validGiftContent({ kind: 'letter', body: 'x'.repeat(10001) }), false);
+const other = new GiftStore({ ...base, gift_id: 'another-gift' }, world, 'sender', storage);
+assert.deepEqual(other.read().object_contents, base.object_contents);
+const blocked = new GiftStore(base, world, 'sender', { getItem: storage.getItem, setItem: () => { throw Error('quota'); } });
+const before = blocked.read();
+assert.throws(() => blocked.save(letterId, { kind: 'letter', body: '不会假装保存' }), /保存失败/);
+assert.deepEqual(blocked.read(), before);
+assert.throws(() => new GiftStore(base, world, 'sender').save(letterId, { kind: 'letter', body: '无法持久化' }), /无法保存/);
+console.log('PASS: gift persistence, photo transforms, recipient write guard, gift isolation, invalid input, quota failure rollback');
