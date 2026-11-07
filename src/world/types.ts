@@ -13,6 +13,20 @@ export interface AssetDefinition {
 }
 export interface AssetManifest { version: number; assets: AssetDefinition[] }
 export interface Interaction { title: string; description: string }
+export interface PlacementSurface {
+  surface_id: string;
+  kind: "floor" | "tabletop";
+  /** Four corners: back, right, front, left; normalized to background. */
+  polygon: Anchor[];
+  depth_y?: number;
+  blockers: { id: string; polygon: Anchor[] }[];
+}
+export interface PlacementRules {
+  version: number;
+  projection: "orthographic";
+  surfaces: PlacementSurface[];
+  occluders: { id: string; depth_y: number; polygons: Anchor[][] }[];
+}
 export interface WorldObject {
   object_id: string;
   asset_id: string;
@@ -25,6 +39,12 @@ export interface WorldObject {
   clickable: boolean;
   draggable?: boolean;
   content_type?: "photo_frame" | "letter";
+  placement?: {
+    contact: Anchor;
+    /** Ground-plane axis lengths, measured relative to background width. */
+    footprint: { width: number; depth: number };
+    surfaces: string[];
+  };
   interaction: Interaction;
 }
 export interface WorldHotspot {
@@ -42,6 +62,7 @@ export interface WorldConfig {
   background_id: string;
   objects: WorldObject[];
   hotspots: WorldHotspot[];
+  placement?: PlacementRules;
 }
 export interface RoomTarget {
   id: string;
@@ -74,9 +95,17 @@ export interface PhotoFrameContent {
 }
 export interface LetterContent { kind: "letter"; body: string }
 export type GiftContent = PhotoFrameContent | LetterContent;
+export interface GiftDetails {
+  recipient: string;
+  sender: string;
+  memory: string;
+  /** The first photo lives only in the photo-frame content. */
+  extra_photos: string[];
+}
 export interface GiftConfig {
   version: 1;
   gift_id: string;
   world_id: string;
   object_contents: Record<string, GiftContent>;
+  details?: GiftDetails;
 }

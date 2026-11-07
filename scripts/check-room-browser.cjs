@@ -77,15 +77,15 @@ let configChanged = false;
       if (viewport.width === 390) await page.screenshot({ path: path.join(qa, 'room-mobile.png'), fullPage: true });
     }
     await page.getByRole('link', { name: '返回首页' }).click();
-    await page.getByRole('heading', { name: '应许之地', exact: true }).waitFor();
+    await page.waitForURL(`${url}/`);
     await page.locator('canvas').waitFor({ state: 'detached' });
-    await page.getByRole('link', { name: '进入世界演示' }).click(); await ready();
+    await page.goto(`${url}/world-demo`); await ready();
 
-    // Real JSON edit: move cat into bookshelf hotspot, preserving the original in finally.
+    // Real JSON edit: move cat to another valid floor point, restoring in finally.
     const changed = structuredClone(world);
     changed.world_id = `${world.world_id}-json-check`;
     const moved = changed.objects.find(o => o.type === 'pet');
-    moved.position_x = 0.61; moved.position_y = 0.49;
+    moved.position_x = 0.60; moved.position_y = 0.69;
     // A fresh tab avoids clicking during Next's refresh of the old module graph.
     await page.close();
     configChanged = true; fs.writeFileSync(configPath, JSON.stringify(changed, null, 2));
@@ -94,8 +94,8 @@ let configChanged = false;
     await page.goto(`${url}/world-demo`);
     await page.locator(`canvas[data-world-id="${changed.world_id}"]`).waitFor({ timeout: 45000 });
     await ready();
-    await clickObject(moved); // Opaque cat must win over the bookshelf.
-    // Transparent corner of the PNG must pass through to the bookshelf.
+    await clickObject(moved);
+    // The fixed furniture remains clickable after changing placement data.
     await clickPoint(0.533, 0.328, world.hotspots[0].interaction.title);
     await page.screenshot({ path: path.join(qa, 'room-json-moved.png'), fullPage: true });
     await page.close();

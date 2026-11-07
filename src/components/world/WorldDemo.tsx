@@ -1,12 +1,13 @@
 ﻿"use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { Game } from "phaser";
 import type { WorldDemoScene } from "@/game/scenes/WorldDemoScene";
 import { assetManifest, demoWorld } from "@/world/config";
 import { RoomSession } from "@/world/RoomSession";
 import { RoomLayout } from "@/world/RoomLayout";
 import { GiftStore } from "@/world/GiftStore";
+import { openWinterGift, WINTER_GIFT_ID } from "@/world/WinterGift";
 import demoGiftJson from "@/world/demo-gift.json";
 import GiftContentDialog from "./GiftContentDialog";
 import type { GiftConfig, GiftContent, GiftMode, RoomSnapshot } from "@/world/types";
@@ -14,7 +15,20 @@ import type { GiftConfig, GiftContent, GiftMode, RoomSnapshot } from "@/world/ty
 const background = assetManifest.assets.find(a => a.asset_id === demoWorld.background_id)!;
 const initial: RoomSnapshot = { selected: null, message: "正在打开你的房间…", storage_warning: "" };
 
-export default function WorldDemo() {
+export interface WorldDemoHandle {
+  onEditRequest: (objectId: string) => void;
+}
+interface WorldDemoProps {
+  ref?: Ref<WorldDemoHandle>;
+  onReady?: () => void;
+  onError?: (message: string) => void;
+  onItemCollected?: (itemId: string) => void;
+  onObjectClicked?: (objectId: string) => void;
+}
+
+export default function WorldDemo({ ref, ...callbacks }: WorldDemoProps) {
+  const callbacksRef = useRef(callbacks);
+  callbacksRef.current = callbacks;
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
   const layoutRef = useRef<RoomLayout | null>(null);
@@ -25,6 +39,12 @@ export default function WorldDemo() {
   const [snapshot, setSnapshot] = useState(initial);
   const [status, setStatus] = useState("正在加载房间素材…");
   const [ready, setReady] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    onEditRequest(objectId) {
+      if (mode === "sender" && demoWorld.objects.some(o => o.object_id === objectId && o.content_type)) activate(objectId);
+    },
+  }), [ready, mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +57,9 @@ export default function WorldDemo() {
         const currentMode: GiftMode = params.get("mode") === "recipient" ? "recipient" : "sender";
         const requestedId = params.get("gift");
         const giftId = requestedId && /^[a-zA-Z0-9_-]{1,80}$/.test(requestedId) ? requestedId : demoGiftJson.gift_id;
-        const store = new GiftStore({ ...demoGiftJson, gift_id: giftId } as GiftConfig, demoWorld, currentMode, storage);
+        const store = giftId === WINTER_GIFT_ID
+          ? openWinterGift(demoGiftJson as GiftConfig, demoWorld, currentMode, storage)
+          : new GiftStore({ ...demoGiftJson, gift_id: giftId } as GiftConfig, demoWorld, currentMode, storage);
         const session = new RoomSession();
         const layout = new RoomLayout(demoWorld, storage);
         const { createWorldGame } = await import("@/game/createWorldGame");
@@ -64,14 +86,21 @@ export default function WorldDemo() {
               setSnapshot(next);
               const object = target.kind === "object" ? demoWorld.objects.find(o => o.object_id === target.id) : undefined;
               if (object?.content_type && store.read().object_contents[target.id]?.kind === object.content_type) setActiveContentId(target.id);
+              if (object) {
+                callbacksRef.current.onObjectClicked?.(object.object_id);
+                if (currentMode === "recipient" && object.type === "memory") callbacksRef.current.onItemCollected?.(object.object_id);
+              }
             }
           },
-          onReady: () => { if (!cancelled) { setStatus("房间已就绪，点击物件探索。"); setReady(true); } },
-          onError: message => { if (!cancelled) { setStatus(message); setReady(false); } },
+          onReady: () => { if (!cancelled) { setStatus("房间已就绪，点击物件探索。"); setReady(true); callbacksRef.current.onReady?.(); } },
+          onError: message => { if (!cancelled) { setStatus(message); setReady(false); callbacksRef.current.onError?.(message); } },
         });
         gameRef.current = game;
       } catch {
-        if (!cancelled) setStatus("房间加载失败，请检查素材配置并刷新重试。");
+        if (!cancelled) {
+          const message = "房间加载失败，请检查素材配置并刷新重试。";
+          setStatus(message); setReady(false); callbacksRef.current.onError?.(message);
+        }
       }
     }
     void mountGame();
@@ -114,7 +143,7 @@ export default function WorldDemo() {
         {mode === "sender" && <a href={`/world-demo?mode=recipient&gift=${encodeURIComponent(gift?.gift_id ?? demoGiftJson.gift_id)}`}>预览收礼者模式</a>}
       </div>}
       <div className="room-placement">
-        <span>{mode === "recipient" ? "轻点相框查看照片，轻点信件展开阅读。" : "按住物品拖动调整位置；轻点相框或信件打开专属内容。"}</span>
+        <span>{mode === "recipient" ? "轻点相框查看照片，轻点信件展开阅读。" : "沿地板拖动摆放，小物件也可放上边桌。轻点物品查看内容。"}</span>
         {mode === "sender" && <button type="button" disabled={!ready} onClick={resetPositions}>恢复默认摆放</button>}
       </div>
       <div className="world-canvas" style={{ aspectRatio: `${background.width} / ${background.height}` }} ref={containerRef} />

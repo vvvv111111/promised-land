@@ -24,7 +24,7 @@ export class RoomLayout {
   }
 
   private basis(o: WorldObject) {
-    return JSON.stringify([this.world.background_id, o.asset_id, o.position_x, o.position_y, o.size, o.anchor]);
+    return JSON.stringify([this.world.background_id, o.asset_id, o.position_x, o.position_y, o.size, o.anchor, this.world.placement?.version, o.placement]);
   }
 
   positions(): Record<string, Anchor> {
