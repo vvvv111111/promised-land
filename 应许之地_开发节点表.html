@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>应许之地 · Hackathon 开发节点表</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #20242b; --muted: #737b87;
+    --line: #e6e9ee; --green: #16865b; --green-bg: #e8f5ef;
+    --blue: #356ac3; --blue-bg: #edf3ff; --amber: #a76b12; --amber-bg: #fff5df;
+    --red: #b64c4c; --red-bg: #fff0f0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; line-height: 1.55; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 18px 56px; }
+  header { margin-bottom: 20px; }
+  .eyebrow { color: var(--muted); font-size: 12px; letter-spacing: .12em; font-weight: 700; }
+  h1 { font-size: clamp(25px,4vw,34px); margin: 6px 0 2px; letter-spacing: -.03em; }
+  .subtitle { color: var(--muted); font-size: 14px; }
+  .topline { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:18px; }
+  .deadline { background: var(--green-bg); color: var(--green); border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 650; }
+  .countdown { color: var(--muted); font-size: 13px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; margin:14px 0; box-shadow:0 2px 8px rgba(20,30,45,.025); }
+  .progress-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .progress-head strong { font-size:15px; }
+  .percent { font-size:24px; font-weight:750; color:var(--green); font-variant-numeric:tabular-nums; }
+  .track { height:9px; border-radius:99px; background:#edf0f3; overflow:hidden; margin:10px 0 7px; }
+  .fill { height:100%; width:0%; background:var(--green); border-radius:99px; transition:width .2s ease; }
+  .progress-meta { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; }
+  .batch { background:var(--card); border:1px solid var(--line); border-radius:16px; margin:14px 0; overflow:hidden; }
+  .batch-head { padding:16px 18px 12px; border-bottom:1px solid var(--line); }
+  .head-row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  h2 { font-size:17px; margin:0; }
+  .time { color:var(--blue); background:var(--blue-bg); padding:4px 9px; border-radius:99px; font-size:12px; white-space:nowrap; }
+  .owner,.goal { color:var(--muted); font-size:13px; margin-top:6px; }
+  .goal strong { color:var(--text); }
+  .batch-body { padding:14px 18px 18px; }
+  .status-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  label.small { color:var(--muted); font-size:12px; }
+  select { border:1px solid var(--line); background:white; color:var(--text); border-radius:8px; padding:7px 10px; font-size:13px; }
+  .tasks { display:grid; gap:9px; }
+  .task { display:flex; align-items:flex-start; gap:9px; font-size:14px; }
+  .task input { margin:3px 0 0; width:16px; height:16px; accent-color:var(--green); flex:none; }
+  .task.done span { color:#8a929d; text-decoration:line-through; }
+  .accept { background:#f7f9fb; border-radius:10px; padding:11px 12px; margin-top:15px; font-size:13px; }
+  .accept b { display:block; font-size:11px; color:var(--muted); margin-bottom:3px; letter-spacing:.04em; }
+  .notes { margin-top:13px; }
+  .notes label { display:block; color:var(--muted); font-size:12px; margin-bottom:6px; }
+  textarea { width:100%; min-height:66px; resize:vertical; border:1px solid var(--line); border-radius:9px; padding:10px 11px; font:inherit; font-size:13px; outline:none; background:#fff; }
+  textarea:focus,select:focus { border-color:#9bb6e7; box-shadow:0 0 0 3px rgba(53,106,195,.08); }
+  .buffer .batch-head { background:var(--amber-bg); }
+  .buffer .time { background:#ffebc2; color:var(--amber); }
+  .tag { font-size:11px; padding:4px 8px; border-radius:99px; background:var(--amber-bg); color:var(--amber); }
+  .section-title { font-size:17px; margin:0 0 6px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .adjust textarea { min-height:100px; }
+  .deliverables { display:grid; gap:10px; margin-top:12px; }
+  .deliverables .task { padding:8px 0; border-bottom:1px solid #f0f1f3; }
+  .actions { display:flex; gap:9px; flex-wrap:wrap; margin-top:13px; }
+  button { border:1px solid var(--line); background:white; border-radius:9px; padding:9px 12px; font-size:13px; cursor:pointer; color:var(--text); }
+  button.primary { background:var(--text); color:white; border-color:var(--text); }
+  button:hover { opacity:.86; }
+  .saved { color:var(--green); font-size:12px; margin-left:auto; align-self:center; }
+  footer { color:var(--muted); font-size:12px; text-align:center; padding:18px 0 0; }
+  @media (max-width:600px) {
+    .wrap { padding:20px 12px 40px; }
+    .panel { padding:15px; }
+    .batch-head,.batch-body { padding-left:14px; padding-right:14px; }
+    .head-row { align-items:flex-start; }
+  }
+  @media print {
+    body { background:white; }
+    .wrap { max-width:none; padding:0; }
+    .panel,.batch { box-shadow:none; break-inside:avoid; }
+    .actions,.countdown { display:none; }
+    textarea { border:1px solid #bbb; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">JUNCTION CHINA 2026 · XIAOMI MIMO</div>
+    <h1>应许之地 · 开发节点表</h1>
+    <div class="subtitle">PROMISED LAND · 每完成一项就打钩，遇到问题随时记录和调整。</div>
+    <div class="topline">
+      <div class="deadline">最终截止：11 月 8 日（周日）16:00</div>
+      <div class="countdown" id="countdown">正在计算剩余时间…</div>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="progress-head">
+      <strong>整体开发进度</strong>
+      <div class="percent" id="percent">0%</div>
+    </div>
+    <div class="track"><div class="fill" id="progress"></div></div>
+    <div class="progress-meta">
+      <span id="done-count">已完成 0 项</span>
+      <span id="left-count">剩余 0 项</span>
+    </div>
+  </section>
+
+  <div id="batches"></div>
+
+  <section class="panel adjust">
+    <h2 class="section-title">临时调整区</h2>
+    <div class="muted">记录新增需求、功能删减、时间调整或跨批次问题。优先写清楚：问题是什么、决定怎么处理、影响哪个节点。</div>
+    <textarea id="adjustments" data-save="adjustments" placeholder="例如：Batch 3 的素材加载遇到问题，决定先降级为 2D；Batch 5 延后 30 分钟……"></textarea>
+  </section>
+
+  <section class="panel">
+    <h2 class="section-title">最终交付清单</h2>
+    <div class="muted">建议交付材料；具体比赛平台字段以官方提交页面为准。</div>
+    <div class="deliverables" id="deliverables"></div>
+    <div class="actions">
+      <button class="primary" id="exportBtn">导出当前进度备份</button>
+      <button id="printBtn">打印 / 保存为 PDF</button>
+      <button id="resetBtn">重置所有勾选和记录</button>
+      <span class="saved" id="saved">进度自动保存在本机浏览器</span>
+    </div>
+  </section>
+  <footer>单文件本地看板 · 数据保存在当前浏览器，不会上传到网络。建议定期导出进度备份。</footer>
+</div>
+
+<script>
+const batches = [
+  {
+    name:"Batch 1 · 项目初始化与技术底座", time:"周五 22:20–23:30", owner:"你主导，两人协作",
+    goal:"创建项目，跑通 MiMo API",
+    tasks:[
+      "创建 GitHub 私有仓库","创建 Next.js + TypeScript 项目","配置 Tailwind CSS 和本地开发环境",
+      "配置 .env.local、.gitignore，保护 API Key","创建服务端 MiMo API 路由",
+      "成功调用 MiMo 并获得返回结果","完成 npm run build 检查","GitHub 首次 commit 和 push"
+    ],
+    accept:"本地网页可以打开，MiMo API 调用成功，GitHub 有第一个稳定版本。"
+  },
+  {
+    name:"Batch 2 · 用户需求与 AI 世界设计", time:"周六 08:30–12:00", owner:"你：API、数据结构；队友：表单、页面",
+    goal:"让 AI 理解用户想创造什么",
+    tasks:[
+      "确定统一的世界 JSON 数据结构","制作礼物定制需求表单","填写赠送者、收礼者和赠言",
+      "支持宠物类型、性格和世界风格选择","支持自然语言补充需求",
+      "MiMo 生成宠物设定","MiMo 生成房间和家具配置","前后端数据格式联调","完成测试并 GitHub commit、push"
+    ],
+    accept:"输入需求后，页面能展示 MiMo 生成的宠物和世界配置。"
+  },
+  {
+    name:"Batch 3 · 数字世界渲染", time:"周六 13:00–15:00", owner:"你：数据映射；队友：视觉与素材",
+    goal:"让 JSON 变成真正可见的世界",
+    tasks:[
+      "确定 2.5D 视觉风格","准备房间背景素材","准备宠物素材","准备家具和装饰素材",
+      "实现房间主题映射","实现家具布局映射","实现宠物展示","测试至少两种不同世界配置",
+      "完成构建检查和 GitHub commit、push"
+    ],
+    accept:"至少两种不同配置能生成对应的宠物和房间。"
+  },
+  {
+    name:"缓冲节点 · 集成与故障处理", time:"周六 15:00–15:45", owner:"两人共同",
+    goal:"解决前三批的遗留问题",
+    tasks:[
+      "检查前后端数据是否一致","检查素材加载和页面显示","修复阻断性 Bug",
+      "确认当前版本可以正常运行","保存稳定版本到 GitHub"
+    ],
+    accept:"前三批功能稳定，不带着已知严重问题进入下一批。", buffer:true
+  },
+  {
+    name:"Batch 4 · 礼物封面与分享链接", time:"周六 15:45–17:30", owner:"你：数据库和路由；队友：礼物页面",
+    goal:"让数字世界真正成为可以赠送的礼物",
+    tasks:[
+      "设计礼物封面","展示赠送者、收礼者和赠言","制作开启礼物按钮","完成简单开启动画",
+      "配置持久化数据库","保存礼物和世界配置","生成唯一礼物 ID","实现 /gift/[id] 页面",
+      "测试手机端打开和刷新","完成 GitHub commit、push"
+    ],
+    accept:"生成礼物后获得独立链接，其他设备打开仍能看到同一份礼物。"
+  },
+  {
+    name:"Batch 5 · 宠物互动与世界修改", time:"周六 18:30–20:00", owner:"你：接口与状态；队友：交互与测试",
+    goal:"让世界不再是一张静态图片",
+    tasks:[
+      "实现宠物睡觉行为","实现宠物玩耍行为","实现宠物靠近或跟随行为","实现宠物点击互动",
+      "接入自然语言修改房间","限制可修改的属性和家具","保存修改后的世界配置",
+      "测试刷新后状态保留","完成 GitHub commit、push"
+    ],
+    accept:"宠物至少三种行为可用，用户能通过对话成功修改房间。"
+  },
+  {
+    name:"Batch 6 · Agent 协作与业务闭环", time:"周六 20:15–21:30", owner:"你：Agent 工作流；队友：用户测试",
+    goal:"体现 MiMo 的 Agent 能力和商业价值",
+    tasks:[
+      "实现 Gift Planner 需求理解","实现 World Designer 世界设计","实现 Quality Checker 结果检查",
+      "完成 Agent 之间的真实任务交接","记录输入、输出和执行状态",
+      "完成一份完整的礼物定制","找至少一位真实用户体验","收集客户反馈或付费意愿",
+      "完成 GitHub commit、push"
+    ],
+    accept:"能够展示一次完整的 Agent 协作和礼物交付过程。"
+  },
+  {
+    name:"Batch 7 · 部署、测试与比赛提交", time:"周日 08:30–15:00", owner:"你：部署与技术；队友：演示与材料",
+    goal:"确保评委能够打开、体验和理解产品",
+    tasks:[
+      "部署正式网站","配置生产环境变量","检查分享链接外网访问","测试手机和电脑端",
+      "检查数据库持久化","修复关键 Bug","检查 GitHub 仓库和版本",
+      "准备示范礼物链接","录制 1–2 分钟演示视频","制作产品介绍 PPT",
+      "准备 Agent 运行记录","完成比赛平台提交"
+    ],
+    accept:"网站可访问，示范礼物可打开，提交材料完整，周日 16:00 前完成提交。"
+  }
+];
+
+const deliverables = [
+  "可访问的应许之地主网站",
+  "一份可以直接打开的示范礼物链接",
+  "完整的礼物生成、开启和互动流程",
+  "真实的 MiMo Agent 调用及运行记录",
+  "GitHub 代码仓库及稳定版本",
+  "产品演示视频（建议 1–2 分钟）",
+  "产品介绍 PPT（建议 5 页）",
+  "业务流程、定价及客户反馈记录"
+];
+
+const root = document.getElementById("batches");
+const storageKey = "promised-land-hackathon-tracker-v1";
+let state = {};
+try { state = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch(e) { state = {}; }
+
+function save() {
+  localStorage.setItem(storageKey, JSON.stringify(state));
+  document.getElementById("saved").textContent = "已自动保存 · " + new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"});
+  updateProgress();
+}
+function taskId(i,j) { return `b${i}-t${j}`; }
+
+batches.forEach((b,i) => {
+  const section = document.createElement("section");
+  section.className = "batch" + (b.buffer ? " buffer" : "");
+  const status = state[`status-${i}`] || "未开始";
+  section.innerHTML = `
+    <div class="batch-head">
+      <div class="head-row">
+        <h2>${b.name}</h2>
+        ${b.buffer ? '<span class="tag">缓冲时间</span>' : `<span class="time">${b.time}</span>`}
+      </div>
+      <div class="owner">负责人：${b.owner}</div>
+      <div class="goal"><strong>本批目标：</strong>${b.goal}</div>
+    </div>
+    <div class="batch-body">
+      <div class="status-row">
+        <label class="small" for="status-${i}">当前状态</label>
+        <select id="status-${i}">
+          ${["未开始","进行中","遇到问题","已完成待验收","已验收"].map(s=>`<option ${status===s?"selected":""}>${s}</option>`).join("")}
+        </select>
+      </div>
+      <div class="tasks">
+        ${b.tasks.map((t,j)=>`
+          <label class="task ${state[taskId(i,j)]?"done":""}">
+            <input type="checkbox" data-task="${taskId(i,j)}" ${state[taskId(i,j)]?"checked":""}>
+            <span>${t}</span>
+          </label>`).join("")}
+      </div>
+      <div class="accept"><b>验收标准</b>${b.accept}</div>
+      <div class="notes">
+        <label for="note-${i}">问题记录 / 阻塞原因 / 需要补充的任务</label>
+        <textarea id="note-${i}" placeholder="例如：MiMo API 返回格式不稳定，需要增加 JSON 校验和重试……">${escapeHtml(state[`note-${i}`]||"")}</textarea>
+      </div>
+    </div>`;
+  root.appendChild(section);
+  section.querySelector(`#status-${i}`).addEventListener("change",e=>{state[`status-${i}`]=e.target.value;save();});
+  section.querySelector(`#note-${i}`).addEventListener("input",e=>{state[`note-${i}`]=e.target.value;save();});
+  section.querySelectorAll("[data-task]").forEach(el=>{
+    el.addEventListener("change",e=>{
+      state[e.target.dataset.task]=e.target.checked;
+      e.target.closest(".task").classList.toggle("done",e.target.checked);
+      save();
+    });
+  });
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+const droot = document.getElementById("deliverables");
+deliverables.forEach((d,i)=>{
+  const id=`delivery-${i}`;
+  const label=document.createElement("label");
+  label.className="task";
+  label.innerHTML=`<input type="checkbox" id="${id}" ${state[id]?"checked":""}><span>${d}</span>`;
+  droot.appendChild(label);
+  label.querySelector("input").addEventListener("change",e=>{state[id]=e.target.checked;label.classList.toggle("done",e.target.checked);save();});
+  if(state[id]) label.classList.add("done");
+});
+
+const adjustment = document.getElementById("adjustments");
+adjustment.value = state.adjustments || "";
+adjustment.addEventListener("input",e=>{state.adjustments=e.target.value;save();});
+
+function updateProgress() {
+  const total = batches.reduce((n,b)=>n+b.tasks.length,0);
+  let done = 0;
+  batches.forEach((b,i)=>b.tasks.forEach((t,j)=>{if(state[taskId(i,j)]) done++;}));
+  const pct = Math.round(done/total*100);
+  document.getElementById("percent").textContent=pct+"%";
+  document.getElementById("progress").style.width=pct+"%";
+  document.getElementById("done-count").textContent=`已完成 ${done} / ${total} 项`;
+  document.getElementById("left-count").textContent=`剩余 ${total-done} 项`;
+}
+updateProgress();
+
+function updateCountdown() {
+  const deadline = new Date("2026-11-08T16:00:00+08:00").getTime();
+  const diff = deadline - Date.now();
+  const el = document.getElementById("countdown");
+  if(diff <= 0) { el.textContent="已到提交截止时间"; return; }
+  const days=Math.floor(diff/86400000), hours=Math.floor(diff%86400000/3600000), mins=Math.floor(diff%3600000/60000);
+  el.textContent=`距离截止还有 ${days>0?days+" 天 ":""}${hours} 小时 ${mins} 分钟`;
+}
+updateCountdown();
+setInterval(updateCountdown,60000);
+
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const blob = new Blob([JSON.stringify({project:"应许之地",exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="应许之地-开发进度备份.json"; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById("printBtn").addEventListener("click",()=>window.print());
+document.getElementById("resetBtn").addEventListener("click",()=>{
+  if(!confirm("确定重置所有勾选、状态和问题记录吗？此操作无法撤销。")) return;
+  localStorage.removeItem(storageKey); location.reload();
+});
+</script>
+</body>
+</html>

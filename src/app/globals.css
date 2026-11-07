@@ -1,0 +1,28 @@
+:root {
+  color-scheme: light;
+  --background: #faf8f3;
+  --foreground: #29382d;
+  --muted: #70796e;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  line-height: 1.6;
+}
+a { color: inherit; }
+a:focus-visible { outline: 3px solid #8b9d7d; outline-offset: 5px; }
+.page { width: min(100% - 40px, 960px); margin: 0 auto; padding: 96px 0; }
+.eyebrow { font-size: 12px; letter-spacing: .2em; color: var(--muted); }
+h1 { margin: 12px 0 20px; font-size: clamp(32px, 6vw, 56px); line-height: 1.2; }
+.intro { font-size: 20px; }
+.muted, .canvas-status { color: var(--muted); }
+.button { display: inline-block; margin-top: 24px; padding: 12px 24px; border-radius: 8px; background: #344c3b; color: white; text-decoration: none; }
+.back { display: inline-block; margin-bottom: 32px; text-underline-offset: 4px; }
+.world-page { padding-top: 40px; }
+.world-canvas { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #f1eee7; border: 1px solid #dddcd2; border-radius: 12px; }
+.world-canvas canvas { display: block; }
+.canvas-status { font-size: 13px; }
