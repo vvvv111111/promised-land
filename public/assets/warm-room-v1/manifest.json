@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "status": "first-pass-needs-in-scene-review",
+  "projection": "orthographic isometric, requested azimuth 45 and elevation 35.264 degrees; generative output not numerically calibrated",
+  "lighting": "fixed warm daytime",
+  "assets": [
+    {
+      "id": "room_warm_01",
+      "file": "room_warm_01.png",
+      "width": 1536,
+      "height": 1024,
+      "hasAlpha": false,
+      "alphaBounds": null
+    },
+    {
+      "id": "cat_orange_01",
+      "file": "cat_orange_01.png",
+      "width": 1536,
+      "height": 1024,
+      "hasAlpha": true,
+      "alphaBounds": [
+        0,
+        30,
+        1480,
+        1024
+      ]
+    },
+    {
+      "id": "armchair_sage_01",
+      "file": "armchair_sage_01.png",
+      "width": 1536,
+      "height": 1024,
+      "hasAlpha": true,
+      "alphaBounds": [
+        31,
+        19,
+        1506,
+        959
+      ]
+    },
+    {
+      "id": "memory_shell_01",
+      "file": "memory_shell_01.png",
+      "width": 1536,
+      "height": 1024,
+      "hasAlpha": true,
+      "alphaBounds": [
+        0,
+        20,
+        1514,
+        1024
+      ]
+    },
+    {
+      "id": "memory_frame_01",
+      "file": "memory_frame_01.png",
+      "width": 1536,
+      "height": 1024,
+      "hasAlpha": true,
+      "alphaBounds": [
+        0,
+        41,
+        1508,
+        989
+      ]
+    },
+    {
+      "id": "memory_letter_01",
+      "file": "memory_letter_01.png",
+      "width": 1536,
+      "height": 1024,
+      "hasAlpha": true,
+      "alphaBounds": [
+        0,
+        0,
+        1442,
+        1024
+      ]
+    }
+  ]
+}
