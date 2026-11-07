@@ -1,0 +1,258 @@
+{
+  "canvas": [
+    960,
+    540
+  ],
+  "background": "/assets/warm-room-v004/background.png",
+  "calibration": "draft-visual-review-required",
+  "assets": [
+    {
+      "id": "cat_orange_01",
+      "path": "/assets/normalized-v003/pet_cat01_v003.png",
+      "bounds": [
+        402,
+        68,
+        1153,
+        957
+      ],
+      "allowed": [
+        "floor"
+      ],
+      "calibration": "draft-visual-review-required",
+      "anchor": "content-bottom-center",
+      "hit": "alpha-128"
+    },
+    {
+      "id": "armchair_sage_01",
+      "path": "/assets/normalized-v003/furniture_armchair01_v003.png",
+      "bounds": [
+        348,
+        48,
+        1143,
+        974
+      ],
+      "allowed": [
+        "floor"
+      ],
+      "calibration": "draft-visual-review-required",
+      "anchor": "content-bottom-center",
+      "hit": "alpha-128"
+    },
+    {
+      "id": "memory_shell_01",
+      "path": "/assets/normalized-v003/memory_shell01_v003.png",
+      "bounds": [
+        345,
+        167,
+        1201,
+        852
+      ],
+      "allowed": [
+        "table",
+        "shelf"
+      ],
+      "calibration": "draft-visual-review-required",
+      "anchor": "content-bottom-center",
+      "hit": "alpha-128"
+    },
+    {
+      "id": "memory_frame_01",
+      "path": "/assets/normalized-v003/memory_frame01_v003.png",
+      "bounds": [
+        318,
+        75,
+        1208,
+        949
+      ],
+      "allowed": [
+        "table",
+        "shelf"
+      ],
+      "calibration": "draft-visual-review-required",
+      "anchor": "content-bottom-center",
+      "hit": "alpha-128"
+    },
+    {
+      "id": "memory_letter_01",
+      "path": "/assets/normalized-v003/memory_envelope01_v003.png",
+      "bounds": [
+        158,
+        130,
+        1326,
+        933
+      ],
+      "allowed": [
+        "table",
+        "shelf"
+      ],
+      "calibration": "draft-visual-review-required",
+      "anchor": "content-bottom-center",
+      "hit": "alpha-128"
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "coffee",
+      "kind": "table",
+      "polygon": [
+        [
+          330,
+          327
+        ],
+        [
+          385,
+          323
+        ],
+        [
+          400,
+          345
+        ],
+        [
+          330,
+          348
+        ]
+      ],
+      "depth": 350
+    },
+    {
+      "id": "cabinet",
+      "kind": "shelf",
+      "polygon": [
+        [
+          800,
+          302
+        ],
+        [
+          858,
+          320
+        ],
+        [
+          858,
+          340
+        ],
+        [
+          807,
+          324
+        ]
+      ],
+      "depth": 340
+    },
+    {
+      "id": "table-right",
+      "kind": "table",
+      "polygon": [
+        [
+          408,
+          316
+        ],
+        [
+          465,
+          309
+        ],
+        [
+          474,
+          328
+        ],
+        [
+          409,
+          342
+        ]
+      ],
+      "depth": 345
+    },
+    {
+      "id": "floor",
+      "kind": "floor",
+      "polygon": [
+        [
+          490,
+          390
+        ],
+        [
+          700,
+          390
+        ],
+        [
+          730,
+          500
+        ],
+        [
+          480,
+          500
+        ]
+      ],
+      "depth": 500
+    }
+  ],
+  "objects": [
+    {
+      "id": "shell",
+      "asset": "memory_shell_01",
+      "surface": "coffee",
+      "x": 360,
+      "y": 339,
+      "width": 22,
+      "scaleY": 0.8
+    },
+    {
+      "id": "album",
+      "asset": "memory_frame_01",
+      "surface": "cabinet",
+      "x": 827,
+      "y": 325,
+      "width": 35,
+      "scaleY": 1
+    },
+    {
+      "id": "letter",
+      "asset": "memory_letter_01",
+      "surface": "table-right",
+      "x": 440,
+      "y": 328,
+      "width": 34,
+      "scaleY": 0.6
+    },
+    {
+      "id": "cat",
+      "asset": "cat_orange_01",
+      "surface": "floor",
+      "x": 600,
+      "y": 455,
+      "width": 75,
+      "scaleY": 1
+    }
+  ],
+  "backgroundRect": [
+    0,
+    0,
+    960,
+    540
+  ],
+  "version": "v004",
+  "fixtures": [
+    {
+      "id": "oven",
+      "label": "烤箱",
+      "x": 531,
+      "y": 260,
+      "width": 78,
+      "height": 75
+    },
+    {
+      "id": "fridge",
+      "label": "冰箱",
+      "x": 818,
+      "y": 223,
+      "width": 79,
+      "height": 190
+    },
+    {
+      "id": "window",
+      "label": "窗户",
+      "x": 190,
+      "y": 144,
+      "width": 180,
+      "height": 170
+    }
+  ]
+}

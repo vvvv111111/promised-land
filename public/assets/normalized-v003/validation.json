@@ -1,0 +1,80 @@
+{
+  "unique_ids": "pass",
+  "asset_count": 6,
+  "composite_size": [
+    1920,
+    1080
+  ],
+  "reused_files_byte_identical": {
+    "room01_bg_v003.png": true,
+    "memory_shell01_v003.png": true,
+    "memory_frame01_v003.png": true,
+    "memory_envelope01_v003.png": true
+  },
+  "checks": [
+    {
+      "asset_id": "room_warm_01",
+      "png_decode": "pass",
+      "size": "pass",
+      "alpha_range": null,
+      "transparent_corner_count": null,
+      "sha256": "55bfdabf994d0d27b9aa074c4d9931b854609de752f9011b81c77a509327d6ba"
+    },
+    {
+      "asset_id": "cat_orange_01",
+      "png_decode": "pass",
+      "size": "pass",
+      "alpha_range": [
+        0,
+        254
+      ],
+      "transparent_corner_count": 3,
+      "sha256": "f48c0a65dde1b5d13be9dfd3487951d3de1b56191d912f75fba18de20b60ec95"
+    },
+    {
+      "asset_id": "armchair_sage_01",
+      "png_decode": "pass",
+      "size": "pass",
+      "alpha_range": [
+        0,
+        254
+      ],
+      "transparent_corner_count": 4,
+      "sha256": "49c7013b07c44b4885cc37d41ff3db3c477398ce40c0600aba8c04416aff726f"
+    },
+    {
+      "asset_id": "memory_shell_01",
+      "png_decode": "pass",
+      "size": "pass",
+      "alpha_range": [
+        0,
+        254
+      ],
+      "transparent_corner_count": 4,
+      "sha256": "9c460ecf306d725b04985d494f553307f4feac33211507d25434a5312dff7682"
+    },
+    {
+      "asset_id": "memory_frame_01",
+      "png_decode": "pass",
+      "size": "pass",
+      "alpha_range": [
+        0,
+        254
+      ],
+      "transparent_corner_count": 4,
+      "sha256": "a0835fc876ae77698827c308eed6c1b29378ccf59502315910dd4cfdf0e44e57"
+    },
+    {
+      "asset_id": "memory_letter_01",
+      "png_decode": "pass",
+      "size": "pass",
+      "alpha_range": [
+        0,
+        254
+      ],
+      "transparent_corner_count": 4,
+      "sha256": "bec79d08fcd9948bc97cc1c3a0605dff74bce7c46f4dca42085dda9ac5a417d6"
+    }
+  ],
+  "phaser_runtime": "not-tested-no-Phaser-project-present"
+}

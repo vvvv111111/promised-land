@@ -1,0 +1,57 @@
+{
+  "status": "visual-review-only-not-runtime-anchors",
+  "coordinate_system": "1920x1080 design canvas",
+  "note": "Positions and widths are draft visual choices, not measured world data or final WorldConfig. Shadows are QA-only approximations.",
+  "objects": [
+    {
+      "asset_id": "armchair_sage_01",
+      "x": 1440,
+      "y": 825,
+      "visible_width": 265,
+      "shadow": [
+        100,
+        18
+      ]
+    },
+    {
+      "asset_id": "cat_orange_01",
+      "x": 1070,
+      "y": 900,
+      "visible_width": 110,
+      "shadow": [
+        42,
+        10
+      ]
+    },
+    {
+      "asset_id": "memory_shell_01",
+      "x": 660,
+      "y": 860,
+      "visible_width": 55,
+      "shadow": [
+        22,
+        5
+      ]
+    },
+    {
+      "asset_id": "memory_frame_01",
+      "x": 1240,
+      "y": 885,
+      "visible_width": 68,
+      "shadow": [
+        26,
+        5
+      ]
+    },
+    {
+      "asset_id": "memory_letter_01",
+      "x": 820,
+      "y": 920,
+      "visible_width": 76,
+      "shadow": [
+        27,
+        5
+      ]
+    }
+  ]
+}

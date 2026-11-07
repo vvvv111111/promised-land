@@ -1,0 +1,23 @@
+{
+  "version": "v004",
+  "type": "pre-rendered-stylized-3d-background",
+  "generator": "built-in image_gen",
+  "size": [
+    1672,
+    941
+  ],
+  "references": "three user supplied interior photos, visual mood and spatial layout guidance only",
+  "runtime_config": "src/game/room.json",
+  "calibration": "browser-checked; user-visual-acceptance-pending",
+  "layers": {
+    "background": "complete architectural interior and fixed kitchen furniture baked in background",
+    "dynamic": "existing separate cat, shell, frame, envelope sprites",
+    "foreground": "door frame and blurred plant baked in background; not an independent occlusion layer"
+  },
+  "limitations": [
+    "Not a 3D model or Blender project",
+    "No 360-degree camera",
+    "Fixed appliances are baked furniture with separate interactive zones",
+    "No new independent foreground occlusion PNG produced"
+  ]
+}

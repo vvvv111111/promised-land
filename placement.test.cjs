@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const {execFileSync}=require('node:child_process');
+execFileSync(process.execPath,['node_modules/typescript/bin/tsc','--ignoreConfig','--module','commonjs','--target','es2020','--resolveJsonModule','--esModuleInterop','--outDir','.placement-test','src/game/placement.ts']);
+const m={exports:require('./.placement-test/placement.js')};
+const room=require('./src/game/room.json'),{canPlace}=m.exports;
+for(const o of room.objects)assert.ok(canPlace(o.asset,o.surface,o.x,o.y,o.width),o.id);
+assert.equal(canPlace('memory_shell_01','floor',530,450),false);
+assert.equal(canPlace('memory_frame_01','floor',530,450),false);
+assert.equal(canPlace('memory_shell_01','coffee',0,0),false);
+assert.equal(canPlace('memory_shell_01','coffee',360,339,200),false);
+assert.equal(canPlace('unknown','coffee',360,339),false);
+console.log('9 placement assertions passed');

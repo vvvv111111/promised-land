@@ -5,9 +5,9 @@ export default function WorldDemoPage() {
   return (
     <main className="page world-page">
       <Link className="back" href="/">← 返回首页</Link>
-      <p className="eyebrow">WORLD DEMO</p>
-      <h1>世界演示</h1>
-      <p className="muted">Phaser 3 基础画布。菱形地面为占位，后续用于展示 2.5D 房间。</p>
+      <p className="eyebrow">MY LITTLE WORLD</p>
+      <h1>午后，回到你的小屋。</h1>
+      <p className="muted">窗外有树影，烤箱里有暖光。把真实的回忆，留在这个小世界里。</p>
       <WorldDemo />
     </main>
   );
