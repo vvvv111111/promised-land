@@ -17,7 +17,7 @@ const url = process.env.ROOM_URL || 'http://localhost:3000';
       await page.getByRole('button', { name, exact: true }).click(); await page.getByRole('dialog').waitFor();
       if (await page.getByRole('dialog').locator('img').count()) await page.getByRole('dialog').locator('img').evaluate(image => image.decode());
     };
-    await page.goto(url + '/room-3d'); await ready(page);
+    await page.goto(url + '/room-3d?mode=recipient'); await ready(page);
     const original = await canvas.screenshot();
     for (const [name, file] of [['CD 机', 'cd'], ['相框', 'frame'], ['信件', 'letter']]) {
       await open(name);
@@ -40,7 +40,7 @@ const url = process.env.ROOM_URL || 'http://localhost:3000';
 
     const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
     const mobile = await mobileContext.newPage(); mobile.on('pageerror', e => errors.push(e.message));
-    await mobile.goto(url + '/room-3d'); await ready(mobile);
+    await mobile.goto(url + '/room-3d?mode=recipient'); await ready(mobile);
     const mobileCanvas = mobile.locator('canvas'), before = await mobileCanvas.screenshot();
     const bounds = await mobileCanvas.boundingBox(), camera = new THREE.PerspectiveCamera(35, bounds.width / bounds.height, .1, 80);
     const distance = Math.min(23, Math.max(12, 7.1 / (2 * Math.tan(THREE.MathUtils.degToRad(35 / 2)) * camera.aspect)));
@@ -62,7 +62,7 @@ const url = process.env.ROOM_URL || 'http://localhost:3000';
 
     const animated = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'no-preference' });
     animated.on('pageerror', e => errors.push(e.message));
-    await animated.goto(url + '/room-3d'); await ready(animated);
+    await animated.goto(url + '/room-3d?mode=recipient'); await ready(animated);
     const starting = await animated.locator('canvas').screenshot();
     await animated.getByRole('button', { name: 'CD 机', exact: true }).click();
     await animated.getByRole('dialog').waitFor(); await animated.waitForTimeout(650);

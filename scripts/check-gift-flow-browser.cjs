@@ -2,7 +2,8 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const world = require('../src/world/demo-world.json');
+const { bedroomRoomDesign, roomFromDesign } = require('../.room-qa/agent-state/room/agent/design.js');
+const fixture = { ...roomFromDesign(bedroomRoomDesign()), run: { id: 'main-flow', model: 'test', attempts: 1, durationMs: 1, totalTokens: 1 } };
 const url = process.env.ROOM_URL || 'http://localhost:3000';
 fs.mkdirSync('.room-qa', { recursive: true });
 
@@ -10,9 +11,10 @@ fs.mkdirSync('.room-qa', { recursive: true });
   const browser = await chromium.launch({ headless: true, ...(process.env.ROOM_CHROMIUM ? { executablePath: process.env.ROOM_CHROMIUM } : {}) });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await context.route('**/api/room-agent', route => route.fulfill({ json: route.request().method() === 'GET' ? { configured: true } : fixture }));
     const page = await context.newPage();
     const errors = []; page.on('pageerror', e => errors.push(e.message));
-    const ready = () => page.locator('.canvas-status').filter({ hasText: '房间已加载' }).waitFor({ timeout: 45000 });
+    const ready = () => page.waitForFunction(() => document.querySelector('.room3d-actions button')?.disabled === false, null, { timeout: 45000 });
     const giftKey = 'promised-land:gift:winter-local-v1';
     const memory = '一起走过的那条街。';
     const letter = '这封信由用户填写。\n不会被默认文案替换。';
@@ -33,15 +35,21 @@ fs.mkdirSync('.room-qa', { recursive: true });
     assert.equal(await page.getByRole('button', { name: '恢复默认摆放', exact: true }).count(), 0);
     assert.equal(await page.locator('.room-panel, [aria-label="物品介绍"]').count(), 0);
 
+    // The generated room is bound to this gift and survives route changes.
+    await page.getByRole('textbox', { name: '房间描述', exact: true }).fill('安静的卧室，有一张书桌。');
+    await page.getByRole('button', { name: '生成房间', exact: true }).click();
+    await page.getByText('已生成并保存到本浏览器。', { exact: true }).waitFor(); await ready();
+    assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).room, giftKey), fixture.definition);
+    assert.equal(await page.evaluate(() => localStorage.getItem('promised-land:room-agent:v1')), null);
     // Explicit room edit request, autosave, manual save, and crop persistence.
-    await page.getByRole('button', { name: '编辑信件', exact: true }).click();
+    await page.locator('.winter-edit-tools').getByRole('button', { name: '编辑信件', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: '编辑信件', exact: true }).click();
     const editedLetter = letter + '\n房间里追加的一行。';
     await dialog.getByRole('textbox', { name: '正文', exact: true }).fill(editedLetter);
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-    await page.getByRole('button', { name: '编辑相框', exact: true }).click();
+    await page.locator('.winter-edit-tools').getByRole('button', { name: '编辑相框', exact: true }).click();
     await dialog.getByRole('button', { name: '编辑相框', exact: true }).click();
     await dialog.getByRole('slider', { name: '缩放', exact: true }).fill('1.6');
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
@@ -55,13 +63,14 @@ fs.mkdirSync('.room-qa', { recursive: true });
     await page.getByRole('heading', { name: '送给 小河', exact: true }).waitFor();
     await page.getByRole('link', { name: '打开水晶球', exact: true }).click(); await ready();
     assert.equal(await page.getByRole('button', { name: '恢复默认摆放' }).count(), 0);
-    await page.locator('summary').click();
-    for (const o of world.objects.filter(o => o.type === 'memory')) {
-      await page.locator('.room-controls').getByRole('button', { name: o.interaction.title, exact: true }).click();
-      if (await dialog.count()) {
-        assert.equal(await dialog.getByRole('button', { name: /^编辑/ }).count(), 0);
-        await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-      }
+    assert.equal(await page.locator('.room-agent').count(), 0);
+    for (const name of ['相框', '信件', 'CD 机']) {
+      await page.locator('.room3d-objects').getByRole('button', { name, exact: true }).click();
+      await dialog.waitFor();
+      assert.equal(await dialog.getByRole('button', { name: /^编辑/ }).count(), 0);
+      assert.equal(await dialog.locator('input[type=file]').count(), 0);
+      if (name === '信件') assert.ok((await dialog.innerText()).includes(editedLetter));
+      await dialog.getByRole('button', { name: '关闭', exact: true }).click();
     }
     await page.getByRole('link', { name: '查看回忆', exact: true }).click();
     assert.ok((await page.locator('.winter-paper').innerText()).includes(memory));
@@ -92,10 +101,22 @@ fs.mkdirSync('.room-qa', { recursive: true });
       }
     }
     // Direct story entry stays locked without collection progress.
-    await page.evaluate(() => localStorage.removeItem('promised-land:winter:collection:v1'));
+    await page.evaluate(() => localStorage.removeItem('promised-land:gift:winter-local-v1:collection:v2'));
     await page.goto(url + '/gift/story');
     await page.getByText('查看三件纪念物后，可打开回忆。', { exact: true }).waitFor();
     assert.equal(await page.locator('.winter-paper').count(), 0);
+    const personal = await page.evaluate(key => localStorage.getItem(key), giftKey);
+    await page.goto(url);
+    await page.getByRole('link', { name: '打开示例', exact: true }).click();
+    await page.waitForURL('**/gift/open?gift=promised-land-example-v1');
+    assert.ok(page.url().includes('gift=promised-land-example-v1'));
+    await page.getByRole('heading', { name: '送给 你', exact: true }).waitFor();
+    await page.getByRole('link', { name: '打开水晶球', exact: true }).click(); await ready();
+    await page.locator('.room3d-objects').getByRole('button', { name: '信件', exact: true }).click();
+    await dialog.waitFor(); assert.ok(!(await dialog.innerText()).includes(editedLetter));
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), giftKey), personal);
+    assert.equal(await page.evaluate(() => localStorage.getItem('promised-land:gift:winter-local-v1:collection:v2')), null);
     assert.deepEqual(errors, []);
     await context.close();
     console.log('PASS: complete gift flow, explicit edit requests, user content and crop retained, recipient collection, story gate, disabled share placeholder without URL, all eight light-theme pages at desktop/mobile, no introductions or page errors');

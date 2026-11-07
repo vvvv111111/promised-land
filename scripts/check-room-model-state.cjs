@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
   const THREE = await import('three');
   const output = path.resolve('.room-qa/model-state'); fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output, 'package.json'), JSON.stringify({ type: 'module' }));
-  fs.writeFileSync(path.join(output, 'tsconfig.json'), JSON.stringify({ extends: '../../tsconfig.json', compilerOptions: { noEmit: false, incremental: false, outDir: '.', rootDir: '../../src' }, include: ['../../src/room/buildRoom.ts'] }));
+  fs.writeFileSync(path.join(output, 'tsconfig.json'), JSON.stringify({ extends: '../../tsconfig.json', compilerOptions: { noEmit: false, incremental: false, outDir: '.', rootDir: '../../src' }, include: ['../../src/room/buildRoom.ts', '../../src/room/agent/design.ts'] }));
   require('node:child_process').execFileSync(process.execPath, [path.resolve('node_modules/typescript/bin/tsc'), '--project', path.join(output, 'tsconfig.json')], { stdio: 'inherit' });
   // Match browser/bundler module resolution in Node without a runtime loader.
   function resolveImports(dir) {
@@ -37,6 +37,11 @@ const { pathToFileURL } = require('node:url');
   assert.ok(table && cd && cd.parent === table);
   const expected = new THREE.Vector3(.38, .648, -.18).applyMatrix4(table.matrixWorld);
   assert.ok(cd.getWorldPosition(new THREE.Vector3()).distanceTo(expected) < 1e-9, 'CD follows its configured support parent');
+  const photo = model.targets.get('sunset-frame');
+  assert.equal(photo.parent, model.room, 'A wall photo is independent of the table');
+  const photoBounds = new THREE.Box3().setFromObject(photo);
+  assert.ok(Math.abs(photoBounds.min.z - (-2.36 + .001)) < .0001, 'Real frame back contacts the wall with a 1mm offset');
+  assert.ok(photoBounds.getSize(new THREE.Vector3()).z < .1, 'Wall frame has no easel leg sticking through the wall');
   assert.deepEqual(model.room.getObjectByName('pet').position.toArray(), [2, .07, 1.5]);
   assert.equal(model.targets.size, 4);
   assert.deepEqual(plan, before, 'Assembly never mutates the serializable plan');
@@ -60,5 +65,41 @@ const { pathToFileURL } = require('node:url');
   const count = canvases;
   assert.throws(() => buildRoom(() => {}, invalid), /Invalid room definition/);
   assert.equal(canvases, count, 'Invalid plans fail before allocating textures');
+  const { roomFromDesign, bedroomRoomDesign } = await import(pathToFileURL(path.join(output, 'room/agent/design.js')));
+  const bedroom = roomFromDesign(bedroomRoomDesign()).definition;
+  const bedroomModel = buildRoom(() => {}, bedroom); bedroomModel.room.updateMatrixWorld(true);
+  for (const id of ['bed', 'desk', 'chair', 'nightstand']) {
+    const root = bedroomModel.room.getObjectByName(id);
+    assert.ok(root && root.children.length > 0, `Real geometry exists for ${id}`);
+  }
+  assert.equal(bedroomModel.targets.size, 4);
+  assert.equal(bedroomModel.targets.get('cd-player').parent.name, 'desk');
+  const ray = new THREE.Raycaster();
+  for (const w of bedroom.architecture.windows) {
+    const wall = bedroomModel.room.getObjectByName('wall-' + w.wall);
+    assert.equal(wall.children.filter(n => n.name.startsWith('window-')).length, 1);
+    const panels = wall.children.filter(n => n.name === 'wall-panel');
+    const origin = w.wall === 'left' ? new THREE.Vector3(0, w.bottom + w.height * .3, w.offset + w.width * .2) : new THREE.Vector3(w.offset + w.width * .2, w.bottom + w.height * .3, 0);
+    ray.set(origin, w.wall === 'left' ? new THREE.Vector3(-1, 0, 0) : new THREE.Vector3(0, 0, -1));
+    assert.equal(ray.intersectObjects(panels).length, 0, 'Window opening contains no wall triangles');
+    ray.set(w.wall === 'left' ? new THREE.Vector3(0, .3, w.offset) : new THREE.Vector3(w.offset, .3, 0), w.wall === 'left' ? new THREE.Vector3(-1, 0, 0) : new THREE.Vector3(0, 0, -1));
+    assert.ok(ray.intersectObjects(panels).length > 0, 'Wall below window remains solid');
+  }
+  const bedroomResources = new Map();
+  bedroomModel.room.traverse(n => {
+    if (!n.isMesh) return;
+    for (const resource of [n.geometry, ...(Array.isArray(n.material) ? n.material : [n.material])]) {
+      if (bedroomResources.has(resource)) continue;
+      bedroomResources.set(resource, 0); resource.addEventListener('dispose', () => bedroomResources.set(resource, bedroomResources.get(resource) + 1));
+    }
+  });
+  bedroomModel.dispose(); bedroomModel.dispose();
+  assert.ok([...bedroomResources.values()].every(count => count === 1), 'Bedroom and custom window GPU resources are released once');
+  for (const id of ['bookshelf', 'wardrobe']) {
+    const withStorage = bedroomRoomDesign(); withStorage.furniture.push({ id, x: 2.4, z: .65, rotation: Math.PI / 2 });
+    const extra = buildRoom(() => {}, roomFromDesign(withStorage).definition);
+    assert.ok(extra.room.getObjectByName(id).children.length > 5, `Real geometry exists for ${id}`); extra.dispose();
+  }
   console.log('PASS: data-driven table/pet transforms, child support inheritance, interaction bindings, immutable input, lamp/audio behaviors, late photo cancellation and GPU cleanup');
+  console.log('PASS: bedroom furniture geometry, desk-supported keepsakes, real window wall openings and GPU cleanup');
 })().catch(e => { console.error(e); process.exitCode = 1; });

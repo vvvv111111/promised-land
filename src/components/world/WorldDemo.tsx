@@ -110,9 +110,9 @@ export default function WorldDemo({ ref, ...callbacks }: WorldDemoProps) {
     if (ready) (gameRef.current?.scene.getScene("WorldDemo") as WorldDemoScene | undefined)?.activate(id);
   }
 
-  function saveContent(content: GiftContent) {
+  async function saveContent(content: GiftContent) {
     if (mode !== "sender" || !activeContentId || !giftStoreRef.current) throw new Error("当前无法保存此内容，请重新打开后重试。");
-    setGift(giftStoreRef.current.save(activeContentId, content));
+    setGift(await giftStoreRef.current.saveLocked(activeContentId, content));
   }
 
   const activeContent = activeContentId ? gift?.object_contents[activeContentId] : undefined;

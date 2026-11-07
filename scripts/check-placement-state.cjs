@@ -2,10 +2,10 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
 require('node:child_process').execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'),
-  'src/world/RoomPlacement.ts', 'src/world/config.ts', '--ignoreConfig', '--outDir', '.room-qa/placement-state',
+  'src/world/RoomPlacement.ts', 'src/world/config.ts', '--ignoreConfig', '--rootDir', 'src', '--outDir', '.room-qa/placement-state',
   '--module', 'node16', '--target', 'es2020', '--moduleResolution', 'node16', '--esModuleInterop', '--resolveJsonModule', '--skipLibCheck'], { cwd: root, stdio: 'inherit' });
-const { RoomPlacement, surfaceToScreen, screenToSurface, insidePolygon, polygonsOverlap } = require('../.room-qa/placement-state/RoomPlacement.js');
-const { validateWorldConfig } = require('../.room-qa/placement-state/config.js');
+const { RoomPlacement, surfaceToScreen, screenToSurface, insidePolygon, polygonsOverlap } = require('../.room-qa/placement-state/world/RoomPlacement.js');
+const { validateWorldConfig } = require('../.room-qa/placement-state/world/config.js');
 const world = require("./fixtures/warm-room-v1.json");
 const assetManifest = require("./fixtures/warm-room-v1-assets.json");
 const model = () => new RoomPlacement(world, assetManifest);

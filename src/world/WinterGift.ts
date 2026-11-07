@@ -4,6 +4,18 @@ import type { GiftConfig, GiftMode, WorldConfig } from "./types";
 export type GiftDraft = { recipient: string; sender: string; memory: string; letter: string; photos: string[] };
 export const WINTER_GIFT_ID = "winter-local-v1";
 export const LEGACY_DRAFT_KEY = "promised-land:winter:draft:v1";
+export const EXAMPLE_GIFT_ID = "promised-land-example-v1";
+export const giftMemories = [
+  { object_id: "sunset-frame", title: "相框" },
+  { object_id: "sealed-letter", title: "信件" },
+  { object_id: "cd-player", title: "CD 机" },
+] as const;
+export const collectionKey = (giftId: string) => `promised-land:gift:${giftId}:collection:v2`;
+
+export function openGift(base: GiftConfig, world: WorldConfig, giftId: string, mode: GiftMode, storage?: Pick<Storage, "getItem" | "setItem">): GiftStore {
+  if (giftId === EXAMPLE_GIFT_ID) return new GiftStore({ ...base, gift_id: giftId }, world, "recipient");
+  return giftId === WINTER_GIFT_ID ? openWinterGift(base, world, mode, storage) : new GiftStore({ ...base, gift_id: giftId }, world, mode, storage);
+}
 const frameId = "sunset-frame";
 const letterId = "sealed-letter";
 

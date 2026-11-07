@@ -1,5 +1,7 @@
 import data from "./default-room.json";
 import { materialIds, modelIds, type RoomDefinition, type RoomObjectId } from "./types";
+import { parseArchitecture } from "./architecture";
+import { validateRoomSpace } from "./spatial";
 
 const fail = (detail: string): never => { throw new Error(`Invalid room definition: ${detail}`); };
 const record = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : fail("expected object");
@@ -18,6 +20,10 @@ export function validateRoomDefinition(input: unknown): asserts input is RoomDef
   name(plan.id); number(plan.seed, -2147483648, 2147483647);
   if (!Number.isInteger(plan.seed)) fail("seed must be an integer");
   vector(plan.dimensions, .5, 30);
+  if (plan.architecture !== undefined) {
+    try { parseArchitecture(plan.architecture); }
+    catch (error) { fail(error instanceof Error ? error.message : "invalid architecture"); }
+  }
   const materials = record(plan.materials);
   for (const id of materialIds) {
     const m = record(materials[id]); color(m.color); number(m.roughness, 0, 1);
@@ -39,6 +45,7 @@ export function validateRoomDefinition(input: unknown): asserts input is RoomDef
     if (node.scale !== undefined) vector(node.scale, .01, 20);
     if (node.parent !== undefined) name(node.parent);
     if (node.surface !== undefined) name(node.surface);
+    if (node.wall !== undefined && (node.model !== "frame" || !["back", "left"].includes(node.wall as string) || node.parent !== undefined || node.surface !== undefined)) fail("invalid wall-mounted frame");
     if (node.surfaces !== undefined) {
       if (!Array.isArray(node.surfaces)) fail("invalid support surfaces");
       const surfaces = node.surfaces as unknown[];
@@ -47,13 +54,12 @@ export function validateRoomDefinition(input: unknown): asserts input is RoomDef
         const surface = record(value); name(surface.id); vector(surface.position);
         if (!Array.isArray(surface.size) || surface.size.length !== 2) fail("invalid surface size");
         (surface.size as unknown[]).forEach(n => number(n, .01, 30));
-        // Current model library exposes the top surface of these two pieces only.
-        if (!["table", "cabinet"].includes(node.model as string) || surface.id !== "top" || ids.has(surface.id)) fail("unknown support surface");
+        if (!["table", "cabinet", "desk", "nightstand"].includes(node.model as string) || surface.id !== "top" || ids.has(surface.id)) fail("unknown support surface");
         ids.add(surface.id as string);
       }
     }
     if (node.interaction !== undefined) {
-      if (!Object.hasOwn(bindings, node.interaction as string) || bindings[node.interaction as RoomObjectId] !== node.model || interactions.has(node.interaction as string)) fail("invalid interaction binding");
+      if (typeof node.interaction !== "string" || !Object.prototype.hasOwnProperty.call(bindings, node.interaction) || bindings[node.interaction as RoomObjectId] !== node.model || interactions.has(node.interaction)) fail("invalid interaction binding");
       interactions.add(node.interaction as string);
     }
     nodes.set(node.id as string, node);
@@ -74,7 +80,7 @@ export function validateRoomDefinition(input: unknown): asserts input is RoomDef
       const position = node.position as number[];
       if (Math.abs(position[0] - surface!.position[0]) > surface!.size[0] / 2 || Math.abs(position[2] - surface!.position[2]) > surface!.size[1] / 2) fail("object origin outside support");
     }
-    if (["cd", "envelope", "frame"].includes(node.model as string) && node.surface === undefined) fail("gift object requires a support surface");
+    if (["cd", "envelope", "frame"].includes(node.model as string) && node.surface === undefined && node.wall === undefined) fail("gift object requires a support surface or wall mount");
   }
   if ([...nodes.values()].filter(n => n.model === "shell").length !== 1) fail("expected one shell");
   for (const id of ["cd-player", "sealed-letter", "sunset-frame"]) if (!interactions.has(id)) fail(`missing ${id}`);
@@ -85,6 +91,7 @@ export function validateRoomDefinition(input: unknown): asserts input is RoomDef
   if ((camera.direction as number[]).every(n => n === 0)) fail("zero camera direction");
   for (const key of ["minDistance", "maxDistance", "fitWidth", "defaultDistance", "maxFitDistance"]) number(camera[key], .1, 100);
   if (!(Number(camera.minDistance) <= Number(camera.defaultDistance) && Number(camera.defaultDistance) <= Number(camera.maxFitDistance) && Number(camera.maxFitDistance) <= Number(camera.maxDistance))) fail("invalid camera distances");
+  validateRoomSpace(input as RoomDefinition);
 }
 
 validateRoomDefinition(data);

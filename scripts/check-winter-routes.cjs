@@ -19,7 +19,7 @@ const base = process.env.GIFT_URL || 'http://localhost:3000';
   }
   for (const [path, expected] of [
     ['/gift/room', '/gift/room?mode=recipient&gift=winter-local-v1'],
-    ['/gift/room?mode=sender&gift=other', '/gift/room?mode=recipient&gift=winter-local-v1'],
+    ['/gift/room?mode=sender&gift=other', '/gift/room?mode=recipient&gift=other'],
     ['/gift/edit?mode=recipient', '/gift/edit?mode=sender&gift=winter-local-v1'],
   ]) {
     const response = await fetch(base + path, { redirect: 'manual' });

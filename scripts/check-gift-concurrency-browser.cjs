@@ -1,0 +1,98 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const base = process.env.ROOM_URL || 'http://localhost:3000';
+const giftId = 'concurrency-test', key = `promised-land:gift:${giftId}`;
+const gift = { ...require('../src/world/demo-gift.json'), gift_id: giftId };
+const { roomFromDesign, bedroomRoomDesign } = require('../.room-qa/agent-state/room/agent/design.js');
+const fixture = { ...roomFromDesign(bedroomRoomDesign()), run: { id: 'conflict-test', model: 'test', attempts: 1, durationMs: 1, totalTokens: 1 } };
+const ready = p => p.waitForFunction(() => document.querySelector('.room3d-actions button')?.disabled === false);
+const editLetter = async (p, body) => {
+  await p.locator('.winter-edit-tools').getByRole('button', { name: '编辑信件', exact: true }).click();
+  const d = p.getByRole('dialog');
+  await d.getByRole('button', { name: '编辑信件', exact: true }).click();
+  await d.getByRole('textbox', { name: '正文', exact: true }).fill(body);
+  return d;
+};
+(async () => {
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.ROOM_CHROMIUM });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+    await context.route('**/api/room-agent', route => route.fulfill({ json: route.request().method() === 'GET' ? { configured: true } : fixture }));
+    const a = await context.newPage(), b = await context.newPage();
+    await a.goto(base);
+    await a.evaluate(({ key, gift }) => localStorage.setItem(key, JSON.stringify(gift)), { key, gift });
+    await Promise.all([a.goto(`${base}/gift/edit?mode=sender&gift=${giftId}`), b.goto(`${base}/gift/edit?mode=sender&gift=${giftId}`)]);
+    await Promise.all([ready(a), ready(b)]);
+    let d = await editLetter(a, 'first tab saved');
+    await d.getByRole('status').filter({ hasText: '已保存' }).waitFor();
+    await d.getByRole('button', { name: '关闭', exact: true }).click();
+    d = await editLetter(b, 'second tab unsaved');
+    await d.getByRole('alert').filter({ hasText: '其他页面更新' }).waitFor();
+    assert.equal(await d.getByRole('textbox').inputValue(), 'second tab unsaved');
+    assert.equal(await a.evaluate(key => JSON.parse(localStorage.getItem(key)).object_contents['sealed-letter'].body, key), 'first tab saved');
+    await d.getByRole('button', { name: '关闭', exact: true }).click();
+    assert.equal(await d.count(), 1, 'Unsaved input remains in the dialog');
+    await d.getByRole('button', { name: '放弃更改', exact: true }).click();
+    // Saving a different field from the stale tab merges the new letter.
+    await b.locator('.winter-edit-tools').getByRole('button', { name: '编辑相框', exact: true }).click();
+    d = b.getByRole('dialog'); await d.getByRole('button', { name: '编辑相框', exact: true }).click();
+    const photo = await b.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 8; return c.toDataURL(); });
+    await d.locator('input[type=file]').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(photo.split(',')[1], 'base64') });
+    await d.getByRole('status').filter({ hasText: '已保存' }).waitFor();
+    await d.getByRole('button', { name: '关闭', exact: true }).click();
+    let persisted = await b.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
+    assert.equal(persisted.object_contents['sealed-letter'].body, 'first tab saved');
+    assert.ok(persisted.object_contents['sunset-frame'].photo);
+    // A room save also merges content without replacing it with the workbench snapshot.
+    await b.getByRole('textbox', { name: '房间描述', exact: true }).fill('卧室');
+    await b.getByRole('button', { name: '生成房间', exact: true }).click();
+    await b.getByText('已生成并保存到本浏览器。', { exact: true }).waitFor(); await ready(b);
+    persisted = await b.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
+    assert.equal(persisted.object_contents['sealed-letter'].body, 'first tab saved');
+    assert.deepEqual(persisted.room, fixture.definition);
+    // Quota failure keeps the complete old room and contents, and blocks completion.
+    const previous = await b.evaluate(key => localStorage.getItem(key), key);
+    await b.evaluate(key => {
+      const set = Storage.prototype.setItem;
+      Storage.prototype.setItem = function(k, v) { if (k === key) throw new DOMException('quota', 'QuotaExceededError'); return set.call(this, k, v); };
+    }, key);
+    await b.getByRole('button', { name: '生成房间', exact: true }).click();
+    await b.getByRole('button', { name: '重试保存', exact: true }).waitFor();
+    assert.equal(await b.getByRole('link', { name: '完成', exact: true }).getAttribute('aria-disabled'), 'true');
+    await b.getByRole('link', { name: '完成', exact: true }).click({ force: true });
+    assert.ok(b.url().includes('/gift/edit?'));
+    assert.equal(await b.evaluate(key => localStorage.getItem(key), key), previous);
+    // Audio is scoped to the gift, and CD/header music hand off playback cleanly.
+    await a.reload(); await ready(a);
+    await a.locator('.room3d-objects').getByRole('button', { name: 'CD 机', exact: true }).click();
+    d = a.getByRole('dialog');
+    const samples = 8000 * 8, wav = Buffer.alloc(44 + samples * 2);
+    wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+    wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
+    for (let i = 0; i < samples; i++) wav.writeInt16LE(Math.round(Math.sin(i * 440 * Math.PI * 2 / 8000) * 1500), 44 + i * 2);
+    await d.locator('input[type=file]').setInputFiles({ name: 'recording.wav', mimeType: 'audio/wav', buffer: wav });
+    await d.getByRole('button', { name: '保存', exact: true }).click();
+    await d.getByText('已保存', { exact: true }).waitFor();
+    await d.getByRole('button', { name: '播放', exact: true }).click();
+    await a.waitForFunction(() => !document.querySelector('.room3d > audio').paused);
+    await d.getByRole('button', { name: '关闭', exact: true }).click();
+    await a.getByRole('button', { name: '播放音乐', exact: true }).click();
+    await a.waitForFunction(() => document.querySelector('.room3d > audio').paused);
+    await a.locator('.room3d-objects').getByRole('button', { name: 'CD 机', exact: true }).click();
+    await d.getByRole('button', { name: '播放', exact: true }).click();
+    await a.getByRole('button', { name: '播放音乐', exact: true }).waitFor();
+    await d.getByRole('button', { name: '关闭', exact: true }).click();
+    await a.goto(`${base}/gift/room?mode=recipient&gift=${giftId}`); await ready(a);
+    await a.locator('.room3d-objects').getByRole('button', { name: 'CD 机', exact: true }).click();
+    await d.getByText('recording.wav', { exact: true }).waitFor();
+    assert.equal(await d.locator('input[type=file]').count(), 0);
+    await d.getByRole('button', { name: '关闭', exact: true }).click();
+    await a.goto(`${base}/gift/room?mode=recipient&gift=promised-land-example-v1`); await ready(a);
+    await a.locator('.room3d-objects').getByRole('button', { name: 'CD 机', exact: true }).click();
+    await d.getByText('暂无音频', { exact: true }).waitFor();
+    await context.close();
+    console.log('PASS: real cross-page locks, same-field conflict retains input, unrelated field/room merges, quota rollback, unsaved navigation guard, gift-bound recipient audio, audio focus and example isolation');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

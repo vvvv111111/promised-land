@@ -1,3 +1,5 @@
+import type { RoomDefinition } from "../room/types";
+
 export type ObjectType = "pet" | "furniture" | "memory";
 export interface Anchor { x: number; y: number }
 export interface AssetDefinition {
@@ -101,8 +103,10 @@ export interface GiftDetails {
 }
 export interface GiftConfig {
   version: 1;
+  revision?: number;
   gift_id: string;
   world_id: string;
   object_contents: Record<string, GiftContent>;
   details?: GiftDetails;
+  room?: RoomDefinition;
 }

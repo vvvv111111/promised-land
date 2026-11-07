@@ -3,11 +3,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
 require('node:child_process').execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'),
-  'src/world/config.ts', 'src/world/RoomSession.ts', 'src/world/RoomLayout.ts', '--ignoreConfig', '--outDir', '.room-qa/state',
+  'src/world/config.ts', 'src/world/RoomSession.ts', 'src/world/RoomLayout.ts', '--ignoreConfig', '--rootDir', 'src', '--outDir', '.room-qa/state',
   '--module', 'node16', '--target', 'es2020', '--moduleResolution', 'node16', '--esModuleInterop',
   '--resolveJsonModule', '--skipLibCheck'], { cwd: root, stdio: 'inherit' });
-const { demoWorld: world, assetManifest, validateWorldConfig } = require('../.room-qa/state/config.js');
-const { RoomSession } = require('../.room-qa/state/RoomSession.js');
+const { demoWorld: world, assetManifest, validateWorldConfig } = require('../.room-qa/state/world/config.js');
+const { RoomSession } = require('../.room-qa/state/world/RoomSession.js');
 const session = new RoomSession();
 for (const object of world.objects) {
   const target = { id: object.object_id, kind: 'object', interaction: object.interaction };
@@ -30,7 +30,7 @@ for (const modify of [
 }
 for (const a of assetManifest.assets) assert.ok(fs.existsSync(require('node:path').join(__dirname, '../public', a.path)), a.path);
 console.log('PASS: repeatable interactions, no collection state, JSON validation, asset paths');
-const { RoomLayout } = require('../.room-qa/state/RoomLayout.js');
+const { RoomLayout } = require('../.room-qa/state/world/RoomLayout.js');
 const records = new Map();
 const layoutStorage = { getItem: k => records.get(k) ?? null, setItem: (k, v) => records.set(k, v) };
 const layout = new RoomLayout(world, layoutStorage);

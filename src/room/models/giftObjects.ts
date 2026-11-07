@@ -39,7 +39,7 @@ export function envelope(room: THREE.Group, ctx: ModelContext): ModelBehavior {
   return {};
 }
 
-export function frame(room: THREE.Group, ctx: ModelContext): ModelBehavior {
+export function frame(room: THREE.Group, ctx: ModelContext, wallMounted = false): ModelBehavior {
   const { box, material, textures, darkWood, paper, onChange } = ctx;
   const frame = room;
   box(frame, .76, .61, .065, darkWood, 0, 0, 0);
@@ -50,7 +50,7 @@ export function frame(room: THREE.Group, ctx: ModelContext): ModelBehavior {
   const photoTexture = new THREE.CanvasTexture(photoCanvas); photoTexture.colorSpace = THREE.SRGBColorSpace; textures.add(photoTexture);
   const photoMaterial = material("#ffffff", .86, photoTexture);
   box(frame, .56, .42, .004, photoMaterial, 0, 0, .048, 0);
-  box(frame, .035, .38, .025, darkWood, 0, -.19, -.13).rotation.x = .5;
+  if (!wallMounted) box(frame, .035, .38, .025, darkWood, 0, -.19, -.13).rotation.x = .5;
 
   let disposed = false, photoSequence = 0;
   return {

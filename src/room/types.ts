@@ -1,6 +1,6 @@
 /** Serializable room plan. Business content remains in GiftStore / audio storage. */
 export type Vec3 = [number, number, number];
-export const modelIds = ["shell", "sofa", "rug", "table", "cd", "envelope", "cabinet", "frame", "lamp", "plant", "clock", "pet", "slippers"] as const;
+export const modelIds = ["shell", "sofa", "rug", "table", "cd", "envelope", "cabinet", "frame", "lamp", "plant", "clock", "pet", "slippers", "bed", "desk", "chair", "nightstand", "bookshelf", "wardrobe"] as const;
 export type ModelId = typeof modelIds[number];
 export type RoomObjectId = "sunset-frame" | "sealed-letter" | "lamp" | "cd-player";
 export const materialIds = ["wood", "paleWood", "darkWood", "plaster", "trim", "sofaFabric", "creamFabric", "rugFabric", "paper", "terracotta", "green", "ceramic", "brass", "ink"] as const;
@@ -21,13 +21,26 @@ export interface RoomNode {
   /** Named support surfaces, local to this furniture model. */
   surfaces?: { id: string; position: Vec3; size: [number, number] }[];
   surface?: string;
+  /** Wall-mounted photo frames face into the room, independent of furniture. */
+  wall?: "left" | "back";
 }
+export interface RoomWindow {
+  wall: "left" | "back";
+  /** Along z on the left wall, along x on the back wall, in local shell metres. */
+  offset: number;
+  width: number;
+  bottom: number;
+  height: number;
+}
+export interface RoomArchitecture { windows: RoomWindow[] }
 export interface RoomDefinition {
   version: 1;
   id: string;
   seed: number;
   /** Width, height, depth of the rectangular shell. Model units are metres. */
   dimensions: Vec3;
+  /** Omitted for legacy rooms, preserving their original shell geometry. */
+  architecture?: RoomArchitecture;
   materials: Record<MaterialId, MaterialSpec>;
   nodes: RoomNode[];
   lighting: {

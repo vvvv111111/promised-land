@@ -10,7 +10,7 @@ interface Props {
   mode: GiftMode;
   content: GiftContent;
   fallbackImage: string;
-  onSave: (content: GiftContent) => void;
+  onSave: (content: GiftContent) => void | Promise<void>;
   onClose: () => void;
   inspection?: boolean;
   onBounds?: (bounds: ViewBounds | null) => void;
@@ -19,9 +19,12 @@ interface Props {
 export default function GiftContentDialog({ mode, content, fallbackImage, onSave, onClose, inspection = false, onBounds }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const uploadSequence = useRef(0);
+  const saveSequence = useRef(0);
+  const pending = useRef(0);
   const [draft, setDraft] = useState<GiftContent>(() => structuredClone(content));
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -39,27 +42,29 @@ export default function GiftContentDialog({ mode, content, fallbackImage, onSave
   }, []);
   useDialogBounds(dialogRef, true, onBounds);
 
-  function persist(next: GiftContent) {
+  async function persist(next: GiftContent) {
     if (!editable) return false;
+    const sequence = ++saveSequence.current;
+    pending.current++;
+    setSaving(true);
     try {
-      onSave(next);
-      setDirty(false); setError(""); setNotice("已保存");
+      await onSave(next);
+      if (sequence === saveSequence.current) { setDirty(false); setError(""); setNotice("已保存"); }
       return true;
     } catch (e) {
-      setDirty(true); setNotice("");
-      setError(e instanceof Error ? e.message : "保存失败。输入已暂留，请检查浏览器存储或减少照片大小后重试。");
+      if (sequence === saveSequence.current) { setDirty(true); setNotice(""); setError(e instanceof Error ? e.message : "保存失败。输入已暂留，请检查浏览器存储或减少照片大小后重试。"); }
       return false;
-    }
+    } finally { pending.current--; if (!pending.current) setSaving(false); }
   }
 
   function change(next: GiftContent) {
     if (!editable) return;
     setDraft(next);
-    persist(next);
+    setDirty(true); void persist(next);
   }
 
   function close() {
-    if (busy) return;
+    if (busy || pending.current) return;
     if (dirty) { setError("更改尚未保存，请重试保存或放弃更改。"); return; }
     onClose();
   }
@@ -88,7 +93,7 @@ export default function GiftContentDialog({ mode, content, fallbackImage, onSave
         <div>
           <h2 id="gift-dialog-title">{draft.kind === "photo_frame" ? "相框" : "信件"}</h2>
         </div>
-        <button className="gift-close" type="button" onClick={close} disabled={busy} aria-label="关闭"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
+        <button className="gift-close" type="button" onClick={close} disabled={busy || saving} aria-label="关闭"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
       </div>
       {draft.kind === "photo_frame" ? (
         <>
@@ -128,8 +133,8 @@ export default function GiftContentDialog({ mode, content, fallbackImage, onSave
       <div className="gift-dialog-actions">
         {editable && (!editing
           ? <button type="button" onClick={() => setEditing(true)}>{draft.kind === "photo_frame" ? "编辑相框" : "编辑信件"}</button>
-          : <button type="button" disabled={busy} onClick={() => { if (persist(draft)) { setEditing(false); setNotice("已保存"); } }}>保存</button>)}
-        {editable && dirty && <button type="button" disabled={busy} onClick={onClose}>放弃更改</button>}
+          : <button type="button" disabled={busy || saving} onClick={async () => { if (await persist(draft)) { setEditing(false); setNotice("已保存"); } }}>保存</button>)}
+        {editable && dirty && <button type="button" disabled={busy || saving} onClick={onClose}>放弃更改</button>}
       </div>
     </dialog>
   );

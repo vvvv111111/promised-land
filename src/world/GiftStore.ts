@@ -1,4 +1,6 @@
 import type { GiftConfig, GiftContent, GiftDetails, GiftMode, WorldConfig } from "./types";
+import { validateRoomDefinition } from "../room/definition";
+import type { RoomDefinition } from "../room/types";
 
 export function validGiftDetails(value: unknown): value is GiftDetails {
   if (!value || typeof value !== "object") return false;
@@ -19,19 +21,24 @@ export function validGiftContent(value: unknown): value is GiftContent {
     && unit(v.position_x) && unit(v.position_y);
 }
 
-/** One persisted gift document, keyed by gift_id; layout stays separate. */
+/** One complete gift document, including its room plan, keyed by gift_id. */
 export class GiftStore {
   private config: GiftConfig;
   readonly storageKey: string;
   warning = "";
+  private observed: string | null = null;
+  private pending: Promise<unknown> = Promise.resolve();
 
   constructor(base: GiftConfig, private world: WorldConfig, private mode: GiftMode, private storage?: Pick<Storage, "getItem" | "setItem">) {
     this.config = structuredClone(base);
     this.storageKey = `promised-land:gift:${base.gift_id}`;
     try {
-      const saved = JSON.parse(storage?.getItem(this.storageKey) ?? "null") as Partial<GiftConfig> | null;
+      this.observed = storage?.getItem(this.storageKey) ?? null;
+      const saved = JSON.parse(this.observed ?? "null") as Partial<GiftConfig> | null;
       if (saved?.version === 1 && saved.gift_id === base.gift_id && saved.world_id === world.world_id && saved.object_contents && typeof saved.object_contents === "object") {
         if (validGiftDetails(saved.details)) this.config.details = structuredClone(saved.details);
+        if (Number.isSafeInteger(saved.revision) && saved.revision! >= 0) this.config.revision = saved.revision;
+        if (saved.room !== undefined) { validateRoomDefinition(saved.room); this.config.room = structuredClone(saved.room); }
         for (const object of world.objects) {
           const content = saved.object_contents[object.object_id];
           if (validGiftContent(content) && content.kind === object.content_type) this.config.object_contents[object.object_id] = structuredClone(content);
@@ -41,6 +48,47 @@ export class GiftStore {
   }
 
   read(): GiftConfig { return structuredClone(this.config); }
+
+  /** Browser writers serialize across tabs; the snapshot check also protects plain adapters. */
+  private locked<T>(action: () => T): Promise<T> {
+    const run = () => typeof navigator !== "undefined" && navigator.locks
+      ? navigator.locks.request(this.storageKey, async () => action()) : Promise.resolve().then(action);
+    const result = this.pending.then(run, run);
+    this.pending = result.catch(() => {});
+    return result;
+  }
+
+  saveLocked(objectId: string, content: GiftContent): Promise<GiftConfig> {
+    return this.locked(() => {
+      const latest = this.latest();
+      const current = latest.read().object_contents[objectId];
+      if (!this.equal(current, this.config.object_contents[objectId]) && !this.equal(current, content)) this.conflict();
+      const committed = latest.save(objectId, content);
+      this.adopt(latest); return committed;
+    });
+  }
+
+  saveRoomLocked(room: RoomDefinition): Promise<GiftConfig> {
+    return this.locked(() => {
+      const latest = this.latest(), next = latest.read();
+      if (!this.equal(next.room, this.config.room) && !this.equal(next.room, room)) this.conflict();
+      const committed = latest.saveGift({ ...next, room });
+      this.adopt(latest); return committed;
+    });
+  }
+
+  private equal(a: unknown, b: unknown) { return JSON.stringify(a) === JSON.stringify(b); }
+  private conflict(): never { throw new Error("礼物已在其他页面更新。请先保留当前输入，再刷新页面后编辑。"); }
+  private latest() {
+    const latest = new GiftStore(this.config, this.world, this.mode, this.storage);
+    if (latest.warning) this.conflict();
+    return latest;
+  }
+  private adopt(store: GiftStore) { this.config = store.read(); this.observed = store.observed; this.warning = store.warning; }
+
+  saveGiftLocked(next: GiftConfig): Promise<GiftConfig> {
+    return this.locked(() => this.saveGift(next));
+  }
 
   save(objectId: string, content: GiftContent): GiftConfig {
     if (this.mode !== "sender") throw new Error("当前无法保存此内容，请重新打开后重试。");
@@ -62,10 +110,15 @@ export class GiftStore {
     }
     if (Object.keys(this.config.object_contents).some(id => !(id in next.object_contents))) throw new Error("当前无法保存此内容，请重新打开后重试。");
     if (!this.storage) throw new Error("浏览器无法保存数据，请允许本地存储后重试。");
+    if (next.room !== undefined) validateRoomDefinition(next.room);
+    if (this.storage.getItem(this.storageKey) !== this.observed) this.conflict();
     const committed = structuredClone(next);
-    try { this.storage.setItem(this.storageKey, JSON.stringify(committed)); }
+    committed.revision = (this.config.revision ?? 0) + 1;
+    const serialized = JSON.stringify(committed);
+    try { this.storage.setItem(this.storageKey, serialized); }
     catch { throw new Error("保存失败。输入已暂留，请检查浏览器存储或减少照片大小后重试。"); }
     this.config = committed;
+    this.observed = serialized;
     this.warning = "";
     return this.read();
   }

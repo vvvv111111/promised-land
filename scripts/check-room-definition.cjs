@@ -8,6 +8,9 @@ const clone = () => JSON.parse(JSON.stringify(defaultRoom));
 validateRoomDefinition(clone());
 const alternate = clone();
 alternate.dimensions = [7, 3.2, 5];
+alternate.nodes.find(n => n.id === 'window-plant').position = [-2.78 * 7 / 6, 1.03 * 3.2 / 3, -.99 * 5 / 4.8];
+alternate.nodes.find(n => n.id === 'clock').position[2] = -.1;
+alternate.nodes.find(n => n.id === 'frame').position[2] = -2.36 * 5 / 4.8 + .0325 * 1.1 + .001;
 alternate.nodes.find(n => n.id === 'table').position = [-1, 0, .7];
 alternate.nodes.find(n => n.id === 'pet').position = [2, .07, 1.5];
 alternate.materials.sofaFabric.texture.color = '#859088';
@@ -31,6 +34,21 @@ for (const change of [
   r => r.nodes.find(n => n.id === 'table').surfaces[0].id = 'not-a-real-surface',
   r => r.nodes.find(n => n.id === 'table').surfaces[0].size = [-1, 1],
   r => r.nodes.find(n => n.id === 'cd').position = [5, .648, 5],
+  r => r.nodes.find(n => n.id === 'cd').position[1] = 99,
+  r => r.nodes.find(n => n.id === 'cd').position[1] += .2,
+  r => r.nodes.find(n => n.id === 'cd').scale = [10, 1, 10],
+  r => r.nodes.find(n => n.id === 'table').position = [...r.nodes.find(n => n.id === 'sofa').position],
+  r => r.nodes.find(n => n.id === 'table').surfaces[0].size = [9, 9],
+  r => r.nodes.find(n => n.id === 'table').position[1] = .5,
+  r => r.nodes.find(n => n.id === 'floor-plant').position[1] = .6,
+  r => r.nodes.find(n => n.id === 'window-plant').position[0] += .3,
+  r => r.nodes.find(n => n.id === 'clock').position[2] += .5,
+  r => r.nodes.find(n => n.id === 'frame').wall = 'front',
+  r => r.nodes.find(n => n.id === 'frame').parent = 'cabinet',
+  r => r.nodes.find(n => n.id === 'frame').position[2] += .1,
+  r => r.nodes.find(n => n.id === 'frame').rotation[1] = Math.PI,
+  r => { const n = r.nodes.find(n => n.id === 'frame'); n.wall = 'left'; n.rotation = [0, Math.PI / 2, 0]; n.position = [-3 + .0325 * 1.1 + .001, 1.9, -.4]; },
+  r => r.dimensions = [2, 3, 2],
   r => r.materials.wood.texture.kind = 'remote-url',
   r => r.materials.wood.color = 'url(https://example.com)',
   r => r.camera.direction = [0, 0, 0],
@@ -40,4 +58,4 @@ for (const change of [
   const invalid = clone(); change(invalid);
   assert.throws(() => validateRoomDefinition(invalid), /Invalid room definition/);
 }
-console.log('PASS: serializable room plan, alternative layout, parent order, invalid transforms/materials, missing gift bindings/supports, parent cycles, lighting/camera limits');
+console.log('PASS: serializable room plan, parent order, transforms/materials, bindings, cycles, lighting/camera limits, full bounds, furniture collisions, support overhang and height');

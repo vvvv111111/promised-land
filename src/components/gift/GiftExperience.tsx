@@ -1,28 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import GiftRoom, { memories } from "./GiftRoom";
+import GiftRoom from "./GiftRoom";
 import Icon from "./GiftIcon";
 import useGiftMusic from "./useGiftMusic";
 import { prepareGiftPhoto } from "@/lib/media/photos";
-import { draftFromGift, giftWithDraft, openWinterGift, WINTER_GIFT_ID, type GiftDraft } from "@/world/WinterGift";
+import { draftFromGift, giftWithDraft, openGift, WINTER_GIFT_ID, EXAMPLE_GIFT_ID, giftMemories as memories, collectionKey, type GiftDraft } from "@/world/WinterGift";
+import type { GiftStore } from "@/world/GiftStore";
+import { selectedRoom } from "@/room/agent/persistence";
 import { demoWorld } from "@/world/config";
 import demoGift from "@/world/demo-gift.json";
 import type { GiftConfig } from "@/world/types";
 import "./winter.css";
 import "./gift-home.css";
+import "@/app/room-3d/room-3d.css";
 
 export type GiftStep = "home" | "create" | "generating" | "edit" | "complete" | "open" | "room" | "story";
 type Draft = GiftDraft;
 const empty: Draft = { recipient: "", sender: "", memory: "", letter: "", photos: [] };
-const COLLECTION_KEY = "promised-land:winter:collection:v1";
-const GIFT_ID = WINTER_GIFT_ID;
-const href = (step: GiftStep) => step === "home" ? "/" : `/gift/${step}${step === "room" ? "?mode=recipient&gift=" + GIFT_ID : step === "edit" ? "?mode=sender&gift=" + GIFT_ID : ""}`;
 
-export default function GiftExperience({ step }: { step: GiftStep }) {
+export default function GiftExperience({ step, giftId = WINTER_GIFT_ID }: { step: GiftStep; giftId?: string }) {
   const router = useRouter();
+  const storeRef = useRef<GiftStore | null>(null);
+  const savingSequence = useRef(0);
+  const COLLECTION_KEY = collectionKey(giftId);
+  const href = (target: GiftStep, id = giftId) => target === "home" ? "/" : `/gift/${target}${target === "room" || target === "edit" ? `?mode=${target === "room" ? "recipient" : "sender"}&gift=${encodeURIComponent(id)}` : id !== WINTER_GIFT_ID ? `?gift=${encodeURIComponent(id)}` : ""}`;
   const [draft, setDraft] = useState<Draft>(empty);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState("");
@@ -31,20 +35,22 @@ export default function GiftExperience({ step }: { step: GiftStep }) {
   const [photoError, setPhotoError] = useState("");
   const [collected, setCollected] = useState<string[]>([]);
   const [generation, setGeneration] = useState(0);
+  const [roomSaved, setRoomSaved] = useState(true);
   const music = useGiftMusic();
   const recipient = ["open", "room", "story"].includes(step);
   useEffect(() => {
     try {
-      const store = openWinterGift(demoGift as GiftConfig, demoWorld, "recipient", localStorage);
+      const store = openGift(demoGift as GiftConfig, demoWorld, giftId, recipient ? "recipient" : "sender", localStorage);
+      storeRef.current = store;
       const gift = store.read();
       setDraft(!gift.details && !localStorage.getItem(store.storageKey) ? empty : draftFromGift(gift));
       setSaved(!store.warning);
       setNotice(store.warning);
       const saved = JSON.parse(localStorage.getItem(COLLECTION_KEY) ?? "[]");
-      if (Array.isArray(saved)) setCollected(memories.filter(m => saved.includes(m.object_id)).map(m => m.object_id));
+      setCollected(Array.isArray(saved) ? memories.filter(m => saved.includes(m.object_id)).map(m => m.object_id) : []);
     } catch { setSaved(false); setNotice("保存记录无法读取，已显示默认内容。"); }
     setHydrated(true);
-  }, [step]);
+  }, [step, giftId, recipient, COLLECTION_KEY]);
   useEffect(() => {
     if (step !== "generating") return;
     setGeneration(0);
@@ -53,12 +59,14 @@ export default function GiftExperience({ step }: { step: GiftStep }) {
   }, [step]);
   function save(next: Draft) {
     setDraft(next);
-    try {
-      const store = openWinterGift(demoGift as GiftConfig, demoWorld, "sender", localStorage);
-      store.saveGift(giftWithDraft(store.read(), next));
-      setSaved(true); setNotice("");
-    }
-    catch { setSaved(false); setNotice("保存失败。输入已暂留，请检查浏览器存储或减少照片大小后重试。"); }
+    const sequence = ++savingSequence.current, store = storeRef.current;
+    setSaved(false);
+    if (!store) { setNotice("当前无法保存，请刷新后重试。"); return; }
+    void store.saveGiftLocked(giftWithDraft(store.read(), next)).then(() => {
+      if (sequence === savingSequence.current) { setSaved(true); setNotice(""); }
+    }).catch(error => {
+      if (sequence === savingSequence.current) { setSaved(false); setNotice(error instanceof Error ? error.message : "保存失败。输入已暂留，请检查浏览器存储或减少照片大小后重试。"); }
+    });
   }
   function collect(id: string) {
     setCollected(previous => {
@@ -76,13 +84,16 @@ export default function GiftExperience({ step }: { step: GiftStep }) {
     catch (error) { setPhotoError(error instanceof Error ? error.message : "照片无法处理，请重新选择。"); }
     finally { setUploading(false); }
   }
-  function create(event: React.FormEvent<HTMLFormElement>) {
+  async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft.recipient.trim() || !draft.memory.trim() || !draft.letter.trim()) { setNotice("请填写对方昵称、共同回忆和信件。"); return; }
     if (!draft.photos.length) { setPhotoError("请至少选择一张照片。"); document.getElementById("photos")?.focus(); return; }
     try {
-      const store = openWinterGift(demoGift as GiftConfig, demoWorld, "sender", localStorage);
-      store.saveGift(giftWithDraft(store.read(), draft));
+      const store = storeRef.current;
+      if (!store) throw new Error("当前无法保存，请刷新后重试。");
+      const next = giftWithDraft(store.read(), draft);
+      next.room ??= selectedRoom(localStorage);
+      await store.saveGiftLocked(next);
       setSaved(true);
       localStorage.removeItem(COLLECTION_KEY); setCollected([]);
       router.push(href("generating"));
@@ -99,7 +110,7 @@ export default function GiftExperience({ step }: { step: GiftStep }) {
       <img className="gift-home-globe" src="/images/promised-land-globe.png" alt="透明水晶球里的小房间，有一把扶手椅和一只猫" width={1024} height={1024} fetchPriority="high" />
       <nav className="gift-home-actions" aria-label="礼物入口">
         <Link className="gift-home-create" href={href("create")}>制作礼物</Link>
-        <Link className="gift-home-example" href={href("open")}>打开示例</Link>
+        <Link className="gift-home-example" href={href("open", EXAMPLE_GIFT_ID)}>打开示例</Link>
       </nav>
     </main>
   );
@@ -158,9 +169,9 @@ export default function GiftExperience({ step }: { step: GiftStep }) {
         {(step === "edit" || step === "room") && <section className="winter-room-layout">
           <div className="winter-room-heading">
             <div><Link className="winter-back" href={step === "edit" ? href("create") : href("open")}>{step === "edit" ? "修改内容" : "返回水晶球"}</Link><h1>{step === "edit" ? "编辑礼物" : "查看礼物"}</h1><p className="winter-page-note">{step === "edit" ? "点击相框或信件编辑。" : "点击物品，查看照片和信件。"}</p></div>
-            {step === "edit" && <div className="winter-room-actions"><Link className="winter-secondary" href={href("open")}>预览</Link><Link className="winter-primary" href={href("complete")}>完成</Link></div>}
+            {step === "edit" && <div className="winter-room-actions"><Link className="winter-secondary" href={href("open")} aria-disabled={!roomSaved} onClick={e => { if (!roomSaved) e.preventDefault(); }}>预览</Link><Link className="winter-primary" href={href("complete")} aria-disabled={!roomSaved} onClick={e => { if (!roomSaved) e.preventDefault(); }}>完成</Link></div>}
           </div>
-          <GiftRoom recipient={step === "room"} collected={collected} onCollect={collect} />
+          <GiftRoom recipient={step === "room"} giftId={giftId} collected={collected} onCollect={collect} onSaveStateChange={setRoomSaved} onAudioPlaying={playing => { if (playing) music.stop(); }} backgroundPlaying={music.playing} />
           {step === "room" && <div className="winter-story-action">{collected.length === 3 ? <Link className="winter-primary" href={href("story")}>查看回忆</Link> : <button className="winter-primary" disabled>再查看 {3 - collected.length} 件物品</button>}</div>}
         </section>}
         {step === "complete" && <section className="winter-complete-copy">

@@ -1,6 +1,10 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const demoGift = require('../src/world/demo-gift.json');
+const legacyRoom = structuredClone(require('../src/room/default-room.json'));
+const oldFrame = legacyRoom.nodes.find(n => n.id === 'frame');
+delete oldFrame.wall; delete oldFrame.scale;
+Object.assign(oldFrame, { parent: 'cabinet', surface: 'top', position: [-.39, 1.43, .01], rotation: [-.13, -.15, 0] });
 const url = process.env.ROOM_URL || 'http://localhost:3000';
 const key = 'promised-land:gift:winter-local-v1';
 
@@ -9,16 +13,17 @@ const key = 'promised-land:gift:winter-local-v1';
   const browser = await chromium.launch({ headless: true, ...(process.env.ROOM_CHROMIUM ? { executablePath: process.env.ROOM_CHROMIUM } : {}) });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
-    await context.addInitScript(({ gift, key }) => {
+    await context.addInitScript(({ gift, key, legacyRoom }) => {
       if (localStorage.getItem(key)) return;
       const image = document.createElement('canvas'); image.width = 80; image.height = 60;
       const ctx = image.getContext('2d'); ctx.fillStyle = '#648766'; ctx.fillRect(0, 0, 40, 60); ctx.fillStyle = '#b77656'; ctx.fillRect(40, 0, 40, 60);
       gift.gift_id = 'winter-local-v1';
+      gift.room = legacyRoom;
       gift.details = { recipient: 'test', sender: 'test', memory: 'saved memory', extra_photos: [] };
       gift.object_contents['sealed-letter'].body = 'saved 3D letter';
       gift.object_contents['sunset-frame'].photo = image.toDataURL();
       localStorage.setItem(key, JSON.stringify(gift));
-    }, { gift: demoGift, key });
+    }, { gift: demoGift, key, legacyRoom });
     const page = await context.newPage(), errors = [];
     page.on('pageerror', e => errors.push(e.message));
     const ready = () => page.waitForFunction(() => document.querySelector('.room3d-actions button')?.disabled === false, { timeout: 45000 });
@@ -38,7 +43,7 @@ const key = 'promised-land:gift:winter-local-v1';
       }, [original.toString('base64'), current.toString('base64')]);
       assert.ok(difference < .5, 'Reset restores the camera within subpixel GPU rendering tolerance: ' + difference);
     }
-    await page.goto(url + '/room-3d'); await ready();
+    await page.goto(url + '/room-3d?mode=recipient'); await ready();
     assert.equal(await canvas.count(), 1);
     const storageBefore = await page.evaluate(() => JSON.stringify(localStorage));
     const original = await screenshot();
@@ -69,7 +74,7 @@ const key = 'promised-land:gift:winter-local-v1';
       const projected = new THREE.Vector3(...point).project(camera);
       await page.mouse.click(box.x + (projected.x + 1) / 2 * box.width, box.y + (1 - projected.y) / 2 * box.height);
     }
-    await clickObject([1.27, 1.43, -1.90]);
+    await clickObject([-1.35, 1.9, -2.267]);
     const dialog = page.getByRole('dialog'); await dialog.waitFor();
     assert.equal(await dialog.getByAltText('礼物相框中的照片').count(), 1);
     assert.equal(await dialog.getByRole('button', { name: '编辑相框', exact: true }).count(), 0);
@@ -99,7 +104,7 @@ const key = 'promised-land:gift:winter-local-v1';
 
     const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
     const mobile = await mobileContext.newPage(); mobile.on('pageerror', e => errors.push(e.message));
-    await mobile.goto(url + '/room-3d');
+    await mobile.goto(url + '/room-3d?mode=recipient');
     await mobile.waitForFunction(() => document.querySelector('.room3d-actions button')?.disabled === false);
     const mobileCanvas = mobile.locator('.room3d-stage canvas'), bounds = await mobileCanvas.boundingBox();
     const before = await mobileCanvas.screenshot();
@@ -121,7 +126,7 @@ const key = 'promised-land:gift:winter-local-v1';
       HTMLCanvasElement.prototype.getContext = function (type, ...args) { return /^webgl/.test(type) ? null : original.call(this, type, ...args); };
     });
     const fallback = await unsupported.newPage();
-    await fallback.goto(url + '/room-3d'); await fallback.locator('.room3d-message[role="alert"]').waitFor();
+    await fallback.goto(url + '/room-3d?mode=recipient'); await fallback.locator('.room3d-message[role="alert"]').waitFor();
     assert.equal(await fallback.getByRole('button', { name: '放大', exact: true }).isDisabled(), true);
     await fallback.getByRole('button', { name: '重试', exact: true }).click();
     await fallback.locator('.room3d-message[role="alert"]').waitFor();

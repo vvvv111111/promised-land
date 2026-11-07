@@ -11,9 +11,10 @@ function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-export default function RoomAudioDialog({ open, close, giftId, editable, onPlayingChange, onBounds }: {
+export default function RoomAudioDialog({ open, close, giftId, editable, onPlayingChange, onBounds, pauseRequested }: {
   open: boolean; close: () => void; giftId: string; editable: boolean; onPlayingChange: (playing: boolean) => void;
   onBounds?: (bounds: ViewBounds | null) => void;
+  pauseRequested?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -28,6 +29,7 @@ export default function RoomAudioDialog({ open, close, giftId, editable, onPlayi
   const [playable, setPlayable] = useState(false);
   const [duration, setDuration] = useState(0), [position, setPosition] = useState(0);
   const active = draft ?? saved;
+  useEffect(() => { if (pauseRequested) audioRef.current?.pause(); }, [pauseRequested]);
 
   useEffect(() => {
     alive.current = true;

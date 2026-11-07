@@ -31,5 +31,5 @@ export default function useGiftMusic() {
     } catch { stop(); }
     finally { starting.current = false; }
   }
-  return { playing, toggle };
+  return { playing, toggle, stop };
 }

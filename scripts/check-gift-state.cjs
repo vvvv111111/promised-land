@@ -2,9 +2,9 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
 require('node:child_process').execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'),
-  'src/world/GiftStore.ts', 'src/world/WinterGift.ts', 'src/world/config.ts', '--ignoreConfig', '--outDir', '.room-qa/gift-state',
+  'src/world/GiftStore.ts', 'src/world/WinterGift.ts', 'src/world/config.ts', '--ignoreConfig', '--rootDir', 'src', '--outDir', '.room-qa/gift-state',
   '--module', 'node16', '--target', 'es2020', '--moduleResolution', 'node16', '--esModuleInterop', '--resolveJsonModule', '--skipLibCheck'], { cwd: root, stdio: 'inherit' });
-const { GiftStore, validGiftContent } = require('../.room-qa/gift-state/GiftStore.js');
+const { GiftStore, validGiftContent } = require('../.room-qa/gift-state/world/GiftStore.js');
 const world = require('../src/world/demo-world.json');
 const base = require('../src/world/demo-gift.json');
 const records = new Map();
@@ -32,7 +32,7 @@ assert.deepEqual(blocked.read(), before);
 assert.throws(() => new GiftStore(base, world, 'sender').save(letterId, { kind: 'letter', body: '无法持久化' }), /无法保存/);
 console.log('PASS: gift persistence, photo transforms, recipient write guard, gift isolation, invalid input, quota failure rollback');
 
-const { openWinterGift, giftWithDraft, draftFromGift, WINTER_GIFT_ID, LEGACY_DRAFT_KEY } = require('../.room-qa/gift-state/WinterGift.js');
+const { openWinterGift, giftWithDraft, draftFromGift, WINTER_GIFT_ID, LEGACY_DRAFT_KEY } = require('../.room-qa/gift-state/world/WinterGift.js');
 const canonicalKey = `promised-land:gift:${WINTER_GIFT_ID}`;
 const legacy = { recipient: 'recipient', sender: 'sender', memory: 'memory', letter: 'legacy letter', photos: [frame.photo, frame.photo] };
 const winterRecords = new Map([[LEGACY_DRAFT_KEY, JSON.stringify(legacy)]]);
@@ -86,3 +86,48 @@ const beforeInvalid = winterRecords.get(canonicalKey);
 assert.throws(() => winter.saveGift(invalid), /无法保存/);
 assert.equal(winterRecords.get(canonicalKey), beforeInvalid);
 console.log('PASS: complete atomic gift save, failure rollback, read-only legacy migration, canonical precedence, room/form consistency, crop preservation');
+
+const asyncTimeout = setTimeout(() => { throw new Error('Gift save tests did not finish'); }, 10000);
+(async () => {
+  const { openGift, EXAMPLE_GIFT_ID, collectionKey } = require('../.room-qa/gift-state/world/WinterGift.js');
+  const { defaultRoom } = require('../.room-qa/gift-state/room/definition.js');
+  const data = new Map(), adapter = { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+  const a = new GiftStore(base, world, 'sender', adapter), b = new GiftStore(base, world, 'sender', adapter);
+  await Promise.all([
+    a.saveLocked(letterId, { kind: 'letter', body: 'concurrent letter' }),
+    b.saveLocked(frameId, frame),
+  ]);
+  const merged = new GiftStore(base, world, 'recipient', adapter).read();
+  assert.equal(merged.object_contents[letterId].body, 'concurrent letter');
+  assert.deepEqual(merged.object_contents[frameId], frame);
+  assert.equal(merged.revision, 2);
+  await assert.rejects(a.saveGiftLocked(a.read()), /其他页面更新/, 'Stale full snapshots cannot silently overwrite other edits');
+  const c = new GiftStore(base, world, 'sender', adapter), d = new GiftStore(base, world, 'sender', adapter);
+  await c.saveLocked(letterId, { kind: 'letter', body: 'newer letter' });
+  const preserved = adapter.getItem(c.storageKey);
+  await assert.rejects(d.saveLocked(letterId, { kind: 'letter', body: 'stale letter' }), /其他页面更新/);
+  assert.equal(adapter.getItem(c.storageKey), preserved);
+  await b.saveRoomLocked(defaultRoom);
+  const bound = new GiftStore(base, world, 'recipient', adapter).read();
+  assert.equal(bound.object_contents[letterId].body, 'newer letter');
+  assert.deepEqual(bound.object_contents[frameId], frame);
+  assert.deepEqual(bound.room, defaultRoom);
+  assert.equal(bound.revision, 4);
+  const nextRoom = structuredClone(defaultRoom); nextRoom.seed++;
+  const stale = new GiftStore(base, world, 'sender', adapter);
+  await b.saveRoomLocked(nextRoom);
+  await assert.rejects(stale.saveRoomLocked(defaultRoom), /其他页面更新/);
+  const beforeRoomFailure = adapter.getItem(b.storageKey);
+  const fail = new GiftStore(base, world, 'sender', { getItem: adapter.getItem, setItem() { throw Error('quota'); } });
+  await assert.rejects(fail.saveRoomLocked(defaultRoom), /保存失败/);
+  assert.equal(adapter.getItem(b.storageKey), beforeRoomFailure);
+  assert.deepEqual(fail.read().room, nextRoom);
+  let reads = 0, writes = 0;
+  const sample = openGift(base, world, EXAMPLE_GIFT_ID, 'sender', { getItem() { reads++; return preserved; }, setItem() { writes++; } });
+  assert.equal(reads, 0, 'Example never loads personal content');
+  assert.deepEqual(sample.read().object_contents, base.object_contents);
+  await assert.rejects(sample.saveRoomLocked(defaultRoom), /无法保存/);
+  assert.equal(writes, 0);
+  assert.notEqual(collectionKey(EXAMPLE_GIFT_ID), collectionKey(WINTER_GIFT_ID));
+  console.log('PASS: concurrent field merge, stale snapshot/same-field/room conflicts, room binding, quota rollback, revisions and read-only example isolation');
+})().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => clearTimeout(asyncTimeout));

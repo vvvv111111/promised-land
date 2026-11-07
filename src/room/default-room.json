@@ -27,7 +27,7 @@
     { "id": "cd", "model": "cd", "parent": "table", "surface": "top", "position": [0.38, 0.648, -0.18], "rotation": [0, 0.04, 0], "interaction": "cd-player" },
     { "id": "envelope", "model": "envelope", "parent": "table", "surface": "top", "position": [0.1, 0.652, 0.18], "rotation": [0, -0.16, 0], "interaction": "sealed-letter" },
     { "id": "cabinet", "model": "cabinet", "position": [1.66, 0, -1.97], "surfaces": [{ "id": "top", "position": [0, 1.0725, 0], "size": [1.96, 0.68] }] },
-    { "id": "frame", "model": "frame", "parent": "cabinet", "surface": "top", "position": [-0.39, 1.43, 0.01], "rotation": [-0.13, -0.15, 0], "interaction": "sunset-frame" },
+    { "id": "frame", "model": "frame", "wall": "back", "position": [-1.35, 1.9, -2.32325], "rotation": [0, 0, 0], "scale": [1.1, 1.1, 1.1], "interaction": "sunset-frame" },
     { "id": "lamp", "model": "lamp", "parent": "cabinet", "surface": "top", "position": [0.6, 1.08, 0], "interaction": "lamp" },
     { "id": "floor-plant", "model": "plant", "position": [2.55, 0.04, -0.67], "scale": [1.2, 1.2, 1.2] },
     { "id": "window-plant", "model": "plant", "position": [-2.78, 1.03, -0.99], "scale": [0.43, 0.43, 0.43] },

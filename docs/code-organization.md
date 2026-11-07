@@ -1,26 +1,26 @@
 # 代码职责与房间数据
 
-本轮整理来自 `b92c76f`，选择性集成到 main；排除 V004 的 2.5D 房间、配套素材与独立相册。八页流程保留 main 原有房间，沿用已确认的统一风格。范围见 [main 集成记录](main-integration.md)。
+历史整理来自 `b92c76f`，选择性集成到 main；排除 V004 的 2.5D 房间、配套素材与独立相册。本轮将八页流程接入 3D，沿用已确认的统一风格。历史范围见 [main 集成记录](main-integration.md)。
 
 ## 当前入口
 
 | 入口 | 责任 | 状态 |
 | --- | --- | --- |
-| `/`、`/gift/[step]` | 送礼与收礼的八页流程 | 使用现有 Phaser 房间 |
+| `/`、`/gift/[step]` | 送礼与收礼的八页流程 | 编辑/探索使用 Three.js，编辑页接入房间 Agent |
 | `/world-demo` | 独立 Phaser 房间 | 保留现有功能 |
-| `/room-3d` | Three.js 房间、物品特写、CD 播放 | 独立预览，尚未替换八页流程 |
+| `/room-3d` | Three.js 房间生成、物品特写、CD 播放 | 独立工作台，与主流程共用组件 |
 
 ## 代码位置
 
 | 位置 | 责任 |
 | --- | --- |
 | `components/gift/GiftExperience.tsx` | 页面流程、表单状态、完整礼物保存与收集进度 |
-| `components/gift/GiftRoom.tsx` | Phaser 的明确事件和编辑命令，与外层进度连接 |
-| `components/gift/GiftIcon.tsx`、`useGiftMusic.ts` | 原有图标与背景音乐，不与 CD 音频混用 |
+| `components/gift/GiftRoom.tsx` | 3D 工作台的就绪/查看事件、明确编辑命令，与外层进度连接 |
+| `components/gift/GiftIcon.tsx`、`useGiftMusic.ts` | 原有图标与背景音乐；与 CD 播放互斥，避免叠音 |
 | `components/world`、`game` | 原房间的 Phaser 挂载、场景和现有内容弹窗 |
 | `components/room3d` | 3D 预览页面状态与音频面板；不再定义模型或镜头算法 |
 | `components/shared/useDialogBounds.ts` | 内容面板尺寸回调，供镜头取景使用 |
-| `room/types.ts`、`definition.ts`、`default-room.json` | 可序列化房间数据、校验和当前布局 |
+| `room/types.ts`、`definition.ts`、`spatial.ts`、`default-room.json` | 可序列化房间数据、结构/空间校验和默认布局 |
 | `room/buildRoom.ts` | 根据房间数据组装模型、建立交互目标、统一释放资源 |
 | `room/models/context.ts` | 几何工具、材质、确定性纹理及 GPU 资源归属 |
 | `room/models/architecture.ts`、`furniture.ts` | 房间壳体、地毯、家具和生活用品的局部几何 |
@@ -29,12 +29,17 @@
 | `world/GiftStore.ts`、`WinterGift.ts` | 完整礼物唯一来源、草稿转换、旧记录只读迁移 |
 | `lib/media` | 照片压缩与音频内容检查，不负责持久化 |
 | `lib/storage` | CD 音频的 IndexedDB 存取 |
+| `room/agent` | MiMo 房间设计契约、提示词、布局校验与 RoomDefinition 编译 |
+| `lib/server/roomAgent.ts`、`app/api/room-agent` | 服务端 MiMo 配置、调用、校验修正和安全错误返回 |
+| `components/room3d/RoomAgentWorkbench.tsx` | 文字需求、生成、取消、本机保存、方案导出与运行记录 |
 
 原先集中在 `buildRoom.ts` 的摆放、模型、材质和交互状态已分离。`GiftExperience` 仅抽出原有图标、音乐和房间适配，没有重写页面。
 
 ## 数据流
 
-礼物仍走 `GiftStore → GiftDraft → 表单 → giftWithDraft → saveGift(完整对象)`。相框与信件也由同一完整礼物读取。保存失败保留原完整记录；组件中的未保存输入不会冒充成功保存的数据。没有改变 `winter-local-v1`、localStorage 键或迁移优先级。
+礼物走 `GiftStore → GiftDraft → 表单 → giftWithDraft → saveGiftLocked(完整对象)`。相框/信件的 `saveLocked` 和房间的 `saveRoomLocked` 在锁内读取最新完整礼物，只合并本次目标字段，再以完整对象提交；不同字段的编辑不会相互覆盖。同一字段变化或表单完整快照过期时拒绝保存并保留输入，提示用户刷新。每次成功保存增加 revision，写入失败保留原记录和内存状态。浏览器支持 Web Locks 时跨页面串行化；不支持时使用当前页面队列和旧快照检查，无法保证真正同时写入的跨页面互斥。
+
+相框、信件、表单和 `room?: RoomDefinition` 都以 `promised-land:gift:${giftId}` 为唯一来源。没有改变 `winter-local-v1`、旧草稿只读迁移或正式数据优先的规则。页面初始化不写存储；制作时才显式采用独立工作台已有方案，没有方案则采用默认房间。首页示例使用 `promised-land-example-v1` 的固定只读数据，不读取或写入个人礼物。进度改为按 giftId 隔离的 `collection:v2`，避免把旧贝壳进度误算成 CD。
 
 房间从「模型代码内写死位置」改为 `default-room.json → validateRoomDefinition → buildRoom → 模型局部几何 → Three.js`。场景数据只描述空间，不复制照片、信件或音频。照片和信件来自 GiftStore；音频仍按 `giftId` 存在 `promised-land-room-audio` 的单条完整记录中。
 
@@ -44,15 +49,15 @@
 
 `RoomDefinition` 是 JSON 数据：版本、尺寸、随机种子、材质、模型节点、父子关系、位置/旋转/缩放、支撑面、交互 ID、灯光和初始镜头。当前模型库支持矩形房间与已有家具。尺寸调整仅缩放壳体，家具布局由节点明确给出，不会自动重新排布。
 
-CD 机、相框、信封是必需交互物品，分别绑定 `cd-player`、`sunset-frame`、`sealed-letter`；台灯绑定 `lamp`。桌子和柜子提供有位置与宽深的 `top` 支撑面，礼物物品声明父节点和支撑面。移动父节点会带动物品，模型工厂不再私自决定摆放。
+CD 机、相框、信封是必需交互物品，分别绑定 `cd-player`、`sunset-frame`、`sealed-letter`；台灯绑定 `lamp`。桌子和柜子提供有位置与宽深的 `top` 支撑面，CD、信封和台灯声明父节点和支撑面，移动父节点会带动物品。相框使用 `wall: back/left`，贴合实墙并朝向室内；`wallMount.ts` 描述墙面与窗洞，`wallPhoto.ts` 在低家具上方安排不遮窗、不被高柜遮挡的位置。生成方案保存完整挂墙位置；旧桌面相框只在渲染前适配，不回写原方案。模型工厂仅按挂墙标记去掉桌面支架，不决定摆放。
 
-校验在创建 WebGL 或纹理之前执行，拒绝未知模型、非法数值/材质、重复 ID、缺失或循环父节点、缺失必需物品、无效支撑面和落点超出支撑面。当前不做完整模型足迹、穿插、承托高度或可达性验证；不能把校验通过等同于生成结果已适合发布。支撑面数据应随家具模型同步维护。
+校验在创建 WebGL 或纹理之前执行，拒绝未知模型、非法数值/材质、重复 ID、缺失或循环父节点、缺失必需物品和无效支撑面。空间校验使用模型几何包围范围，计算缩放、旋转与父节点变换，检查越界、承托高度、物品悬出、主要模型重叠和支撑面元数据。它是保守包围盒检查，尚非精确网格碰撞或可达性分析；复杂旋转可能被保守拒绝。模型几何和支撑面变化时需同步维护校验范围与回归。
 
 ## 事件流
 
-Phaser 保持 `WorldDemo → onReady / onItemCollected / onObjectClicked → 外层业务`；`GiftRoom` 使用就绪和收集回调连接 `GiftExperience`，编辑按钮通过 `WorldDemoHandle.onEditRequest(objectId)` 调用房间。不读取中文文案或模拟 DOM 点击。
+独立 Phaser 演示仍保留 `WorldDemo → onReady / onItemCollected / onObjectClicked` 及 `WorldDemoHandle.onEditRequest(objectId)`，不再参与主流程。
 
-3D 保持 `射线命中或物品按钮 → RoomView.activate(objectId) → 镜头特写 → 明确业务回调 → 内容面板`。面板通过 `onBounds` 报告尺寸；关闭面板通过 `clearFocus` 恢复镜头。宠物目前只有独立模型，没有添加移动或互动。
+主流程使用 `GiftRoom → RoomPreviewHandle.onEditRequest → RoomView.activate(objectId)`；3D 射线命中/物品按钮同样进入 activate。镜头特写后通过明确回调打开内容面板，收礼模式以 `onItemCollected` 向 GiftExperience 报告相框、信件、CD 已查看；未上传音频也可计入 CD。面板通过 `onBounds` 报告尺寸；关闭通过 `clearFocus` 恢复镜头。无中文文案判断或模拟 DOM 点击。宠物目前只有独立模型，没有添加移动或互动。
 
 ## 现役与历史代码
 
@@ -68,4 +73,6 @@ Phaser 保持 `WorldDemo → onReady / onItemCollected / onObjectClicked → 外
 
 集成前已验证：八页流程、相框/信件、固定物品、3D 原生点击、镜头与手机手势、物品特写、CD 上传与保存失败回退。重构前后桌面/手机的首页、房间、CD 特写、相框特写共 8 张截图像素差异为 0。
 
-后续才接入房间 Agent 和宠物 Agent、3D 主流程、服务端和分享；本轮没有实现这些功能，也没有部署或推送。Agent 应输出经过校验的房间数据，不直接修改页面或操纵 DOM。
+独立 `/room-3d` 和主流程编辑页共用房间 Agent，通过服务端 MiMo 接口输出经过校验的设计数据，再编译为 `RoomDefinition`，不直接修改页面或操纵 DOM。主流程保存到当前礼物，独立工作台保留自己的方案键；生成/保存未完成时主流程阻止完成与预览。配置、能力范围与验证见 [房间 Agent](room-agent.md)。宠物 Agent、照片重建、服务端数据库和分享仍待接入；没有部署或推送。
+
+本轮回归增加并发目标字段合并、过期快照拒绝、房间绑定、失败回退与示例隔离；测试脚本固定编译根路径，避免误读旧产物。浏览器 `check-gift-flow-browser.cjs` 覆盖 3D 八页闭环与桌面/手机，`check-gift-concurrency-browser.cjs` 覆盖真实双页面冲突和未保存导航保护。Agent 浏览器回归使用模拟响应，不产生模型调用费用。

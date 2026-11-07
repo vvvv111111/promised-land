@@ -33,6 +33,45 @@
 .room-audio-transport span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .room-audio-seek { display: grid; gap: 8px; margin-top: 20px; font-size: 13px; color: var(--muted); }
 .room-audio-seek input { width: 100%; min-height: 32px; accent-color: var(--gift-green); }
+.room-agent-workbench { display: grid; grid-template-columns: 320px minmax(0, 1fr); align-items: start; gap: 32px; margin-top: 24px; }
+.room-agent { min-width: 0; padding-top: 16px; }
+.room-agent-intro { max-width: 68ch; }
+.room-agent h2 { margin: 0 0 8px; font-size: 22px; font-weight: 600; }
+.room-agent p { margin: 8px 0; line-height: 1.7; overflow-wrap: anywhere; }
+.room-agent-intro p, .room-agent-hint { color: var(--muted); font-size: 13px; }
+.room-agent-form { display: grid; gap: 10px; max-width: 760px; margin-top: 20px; }
+.room-agent-form label { font-size: 14px; font-weight: 500; }
+.room-agent textarea { width: 100%; min-height: 96px; padding: 12px 14px; border: 1px solid var(--gift-line); border-radius: 6px; background: #fffdf8; color: var(--foreground); font: inherit; font-size: 14px; line-height: 1.7; resize: vertical; caret-color: var(--gift-green); }
+.room-agent textarea::placeholder { color: var(--muted); opacity: 1; }
+.room-agent textarea:disabled { background: var(--gift-secondary); }
+.room-agent button { min-height: 48px; padding: 10px 16px; border: 0; border-radius: 6px; background: var(--gift-secondary); color: var(--gift-green); font: inherit; font-size: 13px; cursor: pointer; }
+.room-agent button:hover { background: #dedfd2; }
+.room-agent button:active { background: #d6dfcf; }
+.room-agent button:disabled { color: var(--muted); cursor: not-allowed; }
+.room-agent .room-agent-primary { background: var(--gift-green); color: #fffdf8; }
+.room-agent .room-agent-primary:hover { background: #354736; }
+.room-agent .room-agent-primary:disabled { background: var(--gift-secondary); color: var(--muted); }
+.room-agent :is(button, textarea, summary):focus-visible { outline: 2px solid var(--gift-green); outline-offset: 3px; }
+.room-agent ::selection { background: #d6dfcf; color: var(--foreground); }
+.room-agent-actions, .room-agent-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.room-agent-examples button { padding: 4px 0; margin-right: 16px; background: transparent; text-decoration: underline; text-underline-offset: 4px; }
+.room-agent-examples button:hover { background: transparent; color: var(--foreground); }
+.room-agent-actions span { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.room-agent-status { color: var(--muted); font-size: 13px; }
+.room-agent-status:empty { display: none; }
+.room-agent-result { max-width: 760px; margin-top: 20px; font-size: 14px; }
+.room-agent-limits { color: #89472f; }
+.room-agent-limits ul { margin: 4px 0 12px; padding-left: 20px; line-height: 1.7; }
+.room-agent details { margin-top: 12px; font-size: 13px; }
+.room-agent summary { width: fit-content; min-height: 44px; padding: 10px 0; cursor: pointer; color: var(--gift-green); }
+.room-agent dl { margin: 0; color: var(--muted); }
+.room-agent dl div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; margin: 8px 0; }
+.room-agent dd { margin: 0; overflow-wrap: anywhere; }
+.room-agent-loading { min-height: 65dvh; display: grid; place-items: center; color: var(--muted); }
+@media (max-width: 1050px) {
+  .room-agent-workbench { display: block; }
+  .room-agent { padding-bottom: 24px; border-bottom: 1px solid var(--gift-line); }
+}
 @media (max-width: 700px) {
   .room3d-page { width: calc(100% - 32px); padding: 20px 0 24px; }
   .room3d-header .world-brand { font-size: 20px; }
@@ -42,4 +81,7 @@
   .room3d-inspection .gift-dialog-head { top: -20px; margin-top: -20px; margin-inline: -20px; padding-inline: 20px; }
   .room3d-inspection .gift-letter-paper { padding: 16px; }
   .room3d-inspection .gift-letter-body { min-height: 100px; }
+  .room-agent { margin-top: 28px; }
+  .room-agent-actions span { margin-left: 0; width: 100%; }
+  .room-agent textarea { font-size: 16px; }
 }

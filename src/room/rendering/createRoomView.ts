@@ -8,6 +8,7 @@ import { defaultRoom, validateRoomDefinition } from "../definition";
 import type { RoomDefinition } from "../types";
 
 export interface RoomView {
+  setPhoto: (content: PhotoFrameContent) => void;
   reset: () => void;
   zoom: (factor: number) => void;
   activate: (id: RoomObjectId) => void;
@@ -179,7 +180,7 @@ export function createRoomView(container: HTMLElement, options: {
   resize();
 
   return {
-    reset, zoom, activate, setAudioPlaying: model.setAudioPlaying,
+    reset, zoom, activate, setAudioPlaying: model.setAudioPlaying, setPhoto: content => { model.setPhoto(content); requestRender(); },
     clearFocus: () => focus.clear(), setPanelBounds: focus.setPanelBounds,
     dispose() {
       disposed = true; cancelAnimationFrame(frame);
