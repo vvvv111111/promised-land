@@ -7,7 +7,7 @@ export default function WorldDemoPage() {
       <Link className="back" href="/">← 返回首页</Link>
       <p className="eyebrow">WORLD DEMO</p>
       <h1>世界演示</h1>
-      <p className="muted">Phaser 3 基础画布。菱形地面为占位，后续用于展示 2.5D 房间。</p>
+      <p className="muted">一间被阳光照亮的小屋，和几件值得珍藏的回忆。点击房间里的物件，慢慢探索。</p>
       <WorldDemo />
     </main>
   );
