@@ -101,6 +101,18 @@ async function runPetJob(job: RunningJob, image: string) {
     if (job.status !== "running") return;
     // Never return subprocess logs: they can include paths, account data or credentials.
     if (code !== 0) {
+      // Log fixed diagnostic categories only, never subprocess text or arbitrary JSON values.
+      const diagnostic = errorText.match(/^PET_AGENT_DIAGNOSTIC:(\{[^\r\n]+\})$/m)?.[1];
+      if (diagnostic) {
+        try {
+          const data = JSON.parse(diagnostic);
+          if (["input", "recognize", "render", "review", "rerender", "fallback", "export"].includes(data.stage)
+            && ["PermissionError", "FileNotFoundError", "TimeoutError", "ConnectionError", "URLError", "ValueError", "RuntimeError", "ImportError", "OSError", "unknown"].includes(data.kind)
+            && ["chrome_exit", "page_timeout", "page_script", "tls", "review_schema", "recognition_schema", "unknown"].includes(data.reason)) {
+            console.error("[PetAgent] subprocess failed", { stage: data.stage, kind: data.kind, reason: data.reason });
+          }
+        } catch { /* Malformed diagnostics are not safe to log. */ }
+      }
       const auth = /HTTP (401|403)/.test(errorText), rate = /HTTP 429/.test(errorText);
       throw new PetAgentError(auth ? "宠物识别鉴权失败，请检查 MiMo 配置。" : rate ? "MiMo 请求过于频繁或额度不足，请稍后重试。" : "宠物生成失败，请检查素材库、模型和预览环境后重试。");
     }

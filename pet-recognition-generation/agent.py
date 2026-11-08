@@ -253,7 +253,21 @@ def write_json(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def failure_diagnostic(error, stage):
+    """Only fixed categories reach hosted logs; never paths, photos or provider text."""
+    stages = {"input", "recognize", "render", "review", "rerender", "fallback", "export"}
+    kind = next((name for name in ("PermissionError", "FileNotFoundError", "TimeoutError", "ConnectionError", "URLError", "ValueError", "RuntimeError", "ImportError", "OSError")
+                 if any(cls.__name__ == name for cls in type(error).__mro__)), "unknown")
+    text = str(error)
+    reasons = {"Chrome 提前退出": "chrome_exit", "三维页面加载超时": "page_timeout",
+               "预览页面执行失败": "page_script", "CERTIFICATE_VERIFY_FAILED": "tls",
+               "毛色对照结果无效": "review_schema", "宠物识别参数修复后仍无效": "recognition_schema"}
+    reason = next((value for key, value in reasons.items() if key in text), "unknown")
+    return {"stage": stage if stage in stages else "input", "kind": kind, "reason": reason}
+
+
 def generate(args):
+    args._stage = "input"
     library = args.library.resolve()
     studio = library / "outputs" / "PetStudio"
     selection = library / "outputs" / "Pet_Model_Selection_Room"
@@ -276,6 +290,7 @@ def generate(args):
         key = (os.environ.get("MIMO_API_KEY") or (getpass("MiMo API key: ") if sys.stdin.isatty() else "")).strip()
         if not key:
             raise ValueError("未提供 MiMo 密钥")
+        args._stage = "recognize"
         receipt = recognize(photo, mime, key, primary_enabled, presets, photo_coat_enabled)
     if (receipt.get("input_type") != "image_url/base64" or not receipt.get("response_id")
             or receipt.get("image_sha256") != sha256(photo).hexdigest()):
@@ -313,14 +328,17 @@ def generate(args):
         params = validate_appearance(validate(dict(plan)), species, presets)
         if params != plan:
             raise ValueError("PetStudio 改变了请求的毛色参数")
+        args._stage = "render"
         summary.update(render_template(studio, run, params, args.chrome, coat) if coat is not None else render_template(studio, run, params, args.chrome))
         if coat is not None and mode == "live_mimo":
+            args._stage = "review"
             review = review_photo_coat(photo, mime, key, coat, params, run)
             receipt["coat_review"] = review
             if not review["matches"] and review["photo_coat"] != coat:
                 receipt["initial_photo_coat"] = coat
                 coat = review["photo_coat"]
                 recognition["photo_coat"] = coat
+                args._stage = "rerender"
                 summary.update(render_template(studio, run, params, args.chrome, coat))
             write_json(run / "recognition.json", receipt)
         summary.update(status="generated", template="original_" + species, appearance_changed=True, params=params)
@@ -329,6 +347,7 @@ def generate(args):
         if params["pattern"] in presets:
             summary["regional_preset"] = presets[params["pattern"]]["catalog"][1]
     elif fallback is not None:
+        args._stage = "fallback"
         from render import render_fallback
         assets = json.loads((selection / "sources.json").read_text(encoding="utf-8"))
         asset = next((row for row in assets if row["id"] == fallback), None)
@@ -342,6 +361,7 @@ def generate(args):
         summary.update(status="fallback_selected", template=fallback, appearance_changed=False,
                        model="pet.glb", preview="preview.png", sha256=asset["sha256"],
                        source=asset["source"], license=asset["license"])
+    args._stage = "export"
     write_json(run / "result.json", summary)
     print(json.dumps({"run": str(run), **summary}, ensure_ascii=False))
 
@@ -364,6 +384,7 @@ def main():
         else:
             generate(args)
     except (OSError, ValueError, KeyError, TypeError, RuntimeError, ImportError) as error:
+        print("PET_AGENT_DIAGNOSTIC:" + json.dumps(failure_diagnostic(error, getattr(locals().get("args"), "_stage", "input"))), file=sys.stderr)
         parser.exit(1, f"生成失败：{error}\n")
 
 

@@ -13,6 +13,14 @@ from unittest.mock import patch
 import agent
 
 
+class DiagnosticTests(unittest.TestCase):
+    def test_diagnostic_excludes_paths_provider_text_and_secrets(self):
+        error = PermissionError("/private/photo.jpg secret-key provider-body")
+        self.assertEqual(agent.failure_diagnostic(error, "render"), {"stage": "render", "kind": "PermissionError", "reason": "unknown"})
+        self.assertEqual(agent.failure_diagnostic(RuntimeError("Chrome 提前退出 private-data"), "secret-stage"),
+                         {"stage": "input", "kind": "RuntimeError", "reason": "chrome_exit"})
+
+
 class RegionalTests(unittest.TestCase):
     def setUp(self):
         root = Path(__file__).resolve().parent.parent / ".room-qa"
