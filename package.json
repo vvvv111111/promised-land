@@ -13,6 +13,7 @@
     "test": "node scripts/check-state.cjs",
     "pretest": "npm run build:gift-viewer",
     "prepare:pets": "node scripts/prepare-pet-library.cjs",
+    "prepare:vercel": "node scripts/prepare-vercel-assets.cjs",
     "test:pets": "node scripts/check-pet-agent.cjs"
   },
   "dependencies": {

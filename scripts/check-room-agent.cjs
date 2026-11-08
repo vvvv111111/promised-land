@@ -359,6 +359,16 @@ const post = (body, headers = {}) => new Request('http://localhost/api/room-agen
       sessionCalls.push(JSON.parse(options.body));
       return sessionCalls.length <= 2 ? reply({ ...overlapDesign, reference: { isRoom: true, observation: '保留原布局。' } }) : referenceReply();
     };
+    const continuationFetch = global.fetch;
+    let cloudCalls = 0;
+    process.env.ROOM_AGENT_TRANSPORT = 'request';
+    global.fetch = async () => ++cloudCalls <= 2 ? reply({ ...overlapDesign, reference: { isRoom: true, observation: '保留原布局。' } }) : referenceReply();
+    try {
+      const directCloud = await route.POST(post({ continuous: true, referenceImage }));
+      assert.equal(directCloud.status, 200, 'Cloud mode finishes repairs in the initiating request');
+      const cloudResult = await directCloud.json();
+      assert.ok(cloudResult.definition); assert.equal(cloudResult.run.attempts, 3);
+    } finally { delete process.env.ROOM_AGENT_TRANSPORT; global.fetch = continuationFetch; }
     response = await route.POST(post({ continuous: true, referenceImage }));
     assert.equal(response.status, 202);
     const session = await response.json();

@@ -1,4 +1,4 @@
-import { cancelPetJob, getPetJob, petAgentStatus, PetAgentError, startPetJob } from "../../../lib/server/petAgent";
+import { cancelPetJob, generatePetInRequest, getPetJob, petAgentStatus, PetAgentError, startPetJob } from "../../../lib/server/petAgent";
 import { MAX_ROOM_REFERENCE_LENGTH } from "../../../room/agent/reference";
 
 export const runtime = "nodejs";
@@ -33,6 +33,10 @@ export async function POST(request: Request) {
     } finally { reader.releaseLock(); }
     const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).some(key => key !== "image")) throw new PetAgentError("请上传宠物照片后生成。");
+    if (process.env.PET_AGENT_TRANSPORT === "request" || process.env.VERCEL && process.env.PET_AGENT_TRANSPORT !== "poll") {
+      const job = await generatePetInRequest(data?.image, request.signal);
+      return Response.json({ status: job.status, result: job.result, error: job.error }, { headers });
+    }
     return Response.json(await startPetJob(data?.image), { status: 202, headers });
   } catch (error) { return failure(error); }
 }

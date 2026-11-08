@@ -23,5 +23,7 @@ Thumbs.db
 .placement-test/
 .pet-agent/
 .pet-library/
+.deploy-assets/
+.vercel/
 pet-recognition-generation/__pycache__/
 pet-recognition-generation/.venv/

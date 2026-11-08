@@ -64,7 +64,8 @@ export async function POST(request: Request) {
     catch (error) { return Response.json({ error: { code: "INVALID_IMAGE", message: error instanceof Error ? error.message : "参考照片无法读取。" } }, { status: 400, headers }); }
   }
   if (active >= 2) return Response.json({ error: { code: "BUSY", message: "正在处理其他生成任务，请稍后重试。" } }, { status: 429, headers });
-  if (data && typeof data === "object" && "continuous" in data && data.continuous === true) {
+  const requestMode = process.env.ROOM_AGENT_TRANSPORT === "request" || process.env.VERCEL && process.env.ROOM_AGENT_TRANSPORT !== "poll";
+  if (!requestMode && data && typeof data === "object" && "continuous" in data && data.continuous === true) {
     try { return Response.json(startRoomGeneration(typeof prompt === "string" ? prompt.trim() : "", referenceImage as string | undefined, currentRoom), { status: 202, headers }); }
     catch (error) { return errorResponse(error); }
   }

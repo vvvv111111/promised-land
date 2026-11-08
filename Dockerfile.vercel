@@ -1,0 +1,35 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT_STANDALONE=1
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:24-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000 \
+    PET_AGENT_PYTHON=/opt/pet-python/bin/python \
+    PET_AGENT_CHROME=/usr/local/bin/pet-chromium \
+    PET_AGENT_LIBRARY=/app/pet-library \
+    PET_AGENT_CACHE_DIR=/tmp/promised-land-pet-agent \
+    PET_AGENT_TRANSPORT=request ROOM_AGENT_TRANSPORT=request PYTHONDONTWRITEBYTECODE=1
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv chromium ca-certificates tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/pet-python
+COPY pet-recognition-generation/requirements.txt /tmp/pet-requirements.txt
+RUN /opt/pet-python/bin/pip install --no-cache-dir -r /tmp/pet-requirements.txt
+COPY deploy/pet-chromium /usr/local/bin/pet-chromium
+RUN sed -i 's/\r$//' /usr/local/bin/pet-chromium && chmod 755 /usr/local/bin/pet-chromium
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+COPY pet-recognition-generation ./pet-recognition-generation
+# Prepared locally from the user's library; never committed to Git.
+COPY .deploy-assets/pet-library ./pet-library
+RUN /opt/pet-python/bin/python -B pet-recognition-generation/agent.py --capabilities --library /app/pet-library \
+    | /opt/pet-python/bin/python -c 'import json,sys; c=json.load(sys.stdin); assert c["primaryAvailable"] and c["photoCoatAvailable"] and len(c["regionalPresets"]) == 2; print("PetStudio capabilities verified")'
+USER node
+EXPOSE 3000
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "server.js"]

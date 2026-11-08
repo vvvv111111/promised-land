@@ -66,7 +66,7 @@ export default function PetAgentPanel({ definition, disabled, onBusyChange, onCh
       const response = await fetch("/api/pet-agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: photo.dataUrl }), signal });
       let job = await response.json();
       if (!response.ok) throw new Error(job.error?.message || "宠物生成失败，请重试。");
-      if (job.id) jobId.current = job.id;
+      if (job.id && job.status === "running") jobId.current = job.id;
       while (job.status === "running") {
         await new Promise<void>((resolve, reject) => {
           const cancel = () => { window.clearTimeout(timer); reject(new Error("cancelled")); };

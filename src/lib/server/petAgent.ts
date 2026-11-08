@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import { mimoConfig } from "./roomAgent";
 import { validateRoomReference } from "./roomReference";
 import { decodePetGlb, MAX_PET_GLB_BYTES } from "../../room/petAsset";
@@ -19,7 +20,7 @@ const jobs = globals.promisedLandPetJobs ??= new Map();
 const python = () => process.env.PET_AGENT_PYTHON?.trim() || (existsSync(path.resolve("pet-recognition-generation/.venv/Scripts/python.exe")) ? path.resolve("pet-recognition-generation/.venv/Scripts/python.exe") : "python");
 // This is a separately provisioned local library, not a deploy-time file dependency.
 const library = () => path.resolve(/* turbopackIgnore: true */ process.env.PET_AGENT_LIBRARY?.trim() || ".pet-library");
-const cache = () => path.resolve(process.cwd(), ".pet-agent");
+const cache = () => path.resolve(process.env.PET_AGENT_CACHE_DIR?.trim() || (process.env.VERCEL ? path.join(tmpdir(), "promised-land-pet-agent") : ".pet-agent"));
 export class PetAgentError extends Error { constructor(message: string, public status = 400) { super(message); } }
 
 export async function petAgentStatus() {
@@ -44,7 +45,9 @@ function stopTree(child?: ChildProcess) {
   if (process.platform === "win32") {
     const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
     killer.on("error", () => child.kill());
-  } else child.kill("SIGTERM");
+  } else {
+    try { process.kill(-child.pid, "SIGTERM"); } catch { child.kill("SIGTERM"); }
+  }
 }
 
 function publicJob(job: PetJob): PetJob {
@@ -64,6 +67,17 @@ export async function startPetJob(image: unknown) {
   return publicJob(job);
 }
 
+/** Keep the invocation alive and return its own result; no cross-instance polling. */
+export async function generatePetInRequest(image: unknown, signal: AbortSignal) {
+  if (signal.aborted) throw new PetAgentError("已取消", 499);
+  const started = await startPetJob(image), job = jobs.get(started.id)!;
+  const cancel = () => { if (job.status === "running") { job.status = "cancelled"; stopTree(job.process); } };
+  signal.addEventListener("abort", cancel, { once: true });
+  if (signal.aborted) cancel();
+  try { await job.settled; return publicJob(job); }
+  finally { signal.removeEventListener("abort", cancel); jobs.delete(job.id); }
+}
+
 async function runPetJob(job: RunningJob, image: string) {
   let directory: string | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -76,7 +90,7 @@ async function runPetJob(job: RunningJob, image: string) {
     const config = mimoConfig();
     const args = ["-B", "-X", "utf8", path.resolve("pet-recognition-generation/agent.py"), photo, "--library", library(), "--output-dir", directory];
     if (process.env.PET_AGENT_CHROME) args.push("--chrome", process.env.PET_AGENT_CHROME);
-    const child = spawn(python(), args, { cwd: process.cwd(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MIMO_API_KEY: config.key, MIMO_MODEL: process.env.PET_MIMO_MODEL?.trim() || config.model, MIMO_BASE_URL: config.endpoint.replace(/\/chat\/completions$/, "") } });
+    const child = spawn(python(), args, { cwd: process.cwd(), windowsHide: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MIMO_API_KEY: config.key, MIMO_MODEL: process.env.PET_MIMO_MODEL?.trim() || config.model, MIMO_BASE_URL: config.endpoint.replace(/\/chat\/completions$/, "") } });
     job.process = child;
     let output = "", errorText = "";
     child.stdout?.on("data", chunk => { if (output.length < 64_000) output += String(chunk); });
