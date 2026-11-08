@@ -17,6 +17,8 @@ Vercel Container Runtime 当前为 Beta，可见 [官方说明](https://vercel.c
 
 容器默认使用 `PET_AGENT_TRANSPORT=request`、`ROOM_AGENT_TRANSPORT=request`：房间自动修复和宠物生成在发起请求的实例内完成，返回最终结果，避免轮询命中另一实例。页面仍能分别启动两项任务。请求取消会停止本次宠物生成，Linux 终止 Python/Chrome 进程组，临时照片和中间结果写入 `/tmp` 并清理。普通本地运行仍采用原有轮询/持续修复协议。
 
+PetStudio 的已校验导出也重定向到本次任务的 `Variants` 子目录，不写入素材库；这使容器中的只读素材可复用，并避免共享生成记录。
+
 Vercel 实例可缩容，生成过程不跨实例或重启恢复；未完成时需要重试。礼物仍按原功能保存在访问者浏览器，并可下载完整只读礼物包；本次没有把个人礼物改为云端数据库存储。
 
 ## 发布

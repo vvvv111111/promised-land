@@ -12,6 +12,7 @@ from unittest.mock import patch
 import agent
 from photo_coat import validate_photo_coat, protect_review_coat
 from studio_runtime import photo_coat_available, photo_coat_handler, APP_ANCHORS, BAKE_ANCHORS
+from render import job_exports
 import test_agent
 
 
@@ -19,6 +20,20 @@ class PhotoCoatTests(unittest.TestCase):
     setUp = test_agent.RegionalTests.setUp
     provision = test_agent.RegionalTests.provision
     plan = test_agent.RegionalTests.plan
+
+    def test_exports_use_job_directory_and_restore_save_handler(self):
+        calls = []
+        original = lambda root, params, data: calls.append((root, params, data))
+        studio_module = types.SimpleNamespace(save_variant=original)
+        run = self.library / "private-job"
+        with job_exports(studio_module, run):
+            studio_module.save_variant(self.studio, {"pet": "cat"}, b"fixture")
+        self.assertEqual(calls, [(run, {"pet": "cat"}, b"fixture")])
+        self.assertIs(studio_module.save_variant, original)
+        with self.assertRaises(RuntimeError):
+            with job_exports(studio_module, run):
+                raise RuntimeError("interrupted")
+        self.assertIs(studio_module.save_variant, original)
 
     def test_visual_correction_cannot_turn_tabby_stripes_into_a_solid_patch(self):
         stripe = {"region": "head", "kind": "stripes", "color": "#884422", "center": [.5, .8], "size": [.3, .2], "coverage": .4}

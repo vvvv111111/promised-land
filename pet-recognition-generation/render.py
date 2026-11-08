@@ -95,14 +95,26 @@ def capture(send, path):
     path.write_bytes(base64.b64decode(send("Page.captureScreenshot", {"format": "png"})["data"]))
 
 
+@contextmanager
+def job_exports(studio_module, run):
+    """Redirect the validated save operation into this process's private job dir."""
+    original = studio_module.save_variant
+    studio_module.save_variant = lambda _root, params, data: original(run, params, data)
+    try:
+        yield
+    finally:
+        studio_module.save_variant = original
+
+
 def render_template(studio, run, params, chrome, photo_coat=None):
+    import server
     from server import Handler
     from storage import inspect_glb
     if photo_coat is not None:
         from studio_runtime import photo_coat_handler
         Handler = photo_coat_handler(Handler, studio)
 
-    with browser(Handler, run, chrome) as (evaluate, send):
+    with job_exports(server, run), browser(Handler, run, chrome) as (evaluate, send):
         wait_ready(evaluate, "!!window.petStudio")
         if photo_coat is not None:
             evaluate("window.petStudio.setPhotoCoat(" + json.dumps(photo_coat) + ")")
@@ -114,8 +126,8 @@ def render_template(studio, run, params, chrome, photo_coat=None):
           document.querySelector('.tag').textContent = 'MiMo 识图 · 主模板';
           return await window.petStudio.save();
         })()""".replace("PARAMS", json.dumps(params)))
-        model_path = (studio / result["file"]).resolve()
-        if model_path.parent != (studio / "Variants").resolve():
+        model_path = (run / result["file"]).resolve()
+        if model_path.parent != (run / "Variants").resolve():
             raise ValueError("导出路径不在 Variants")
         data = model_path.read_bytes()
         digest = sha256(data).hexdigest()
