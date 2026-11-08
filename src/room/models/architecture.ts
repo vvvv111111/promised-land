@@ -1,15 +1,19 @@
 import * as THREE from "three";
 import type { ModelContext, ModelBehavior } from "./context";
-import type { RoomArchitecture, RoomWindow } from "../types";
+import type { RoomArchitecture, RoomWindow, Vec3 } from "../types";
 
-function floor(room: THREE.Group, ctx: ModelContext) {
+function floor(room: THREE.Group, ctx: ModelContext, dimensions: Vec3 = [6, 3, 4.8], preservePalette = false) {
   const { box, random, materials, paleWood, darkWood } = ctx;
-  box(room, 6.28, .20, 4.88, darkWood, 0, -.13, 0, .035);
-  for (let row = 0; row < 16; row++) {
-    for (let col = 0; col < 4; col++) {
-      const length = 1.5, width = .299;
-      const mat = paleWood.clone(); mat.color.setHSL(.105, .24, .76 + random() * .045); materials.add(mat);
-      box(room, length - .009, .045, width, mat, -2.25 + col * length, -.005, -2.25 + row * .3, .004);
+  const [w, , d] = dimensions, rows = Math.ceil(d / .3), columns = Math.ceil(w / 1.5);
+  box(room, w + .28, .20, d + .08, darkWood, 0, -.13, 0, .035);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      const length = w / columns, width = d / rows;
+      const mat = paleWood.clone();
+      if (preservePalette) mat.color.multiplyScalar(.96 + random() * .04);
+      else mat.color.setHSL(.105, .24, .76 + random() * .045);
+      materials.add(mat);
+      box(room, length - .009, .045, width - .001, mat, -w / 2 + (col + .5) * length, -.005, -d / 2 + (row + .5) * width, .004);
     }
   }
 }
@@ -50,26 +54,27 @@ export function shell(room: THREE.Group, ctx: ModelContext): ModelBehavior {
 }
 
 /** Build wall panels around openings, leaving real gaps in the wall geometry. */
-export function plannedShell(room: THREE.Group, ctx: ModelContext, architecture: RoomArchitecture): ModelBehavior {
-  floor(room, ctx);
+export function plannedShell(room: THREE.Group, ctx: ModelContext, architecture: RoomArchitecture, dimensions: Vec3 = [6, 3, 4.8]): ModelBehavior {
+  const metric = architecture.units === "meters", [w, h, d] = metric ? dimensions : [6, 3, 4.8];
+  floor(room, ctx, [w, h, d], metric);
   const { box, trim } = ctx;
-  box(room, 6, .10, .045, trim, 0, .075, -2.34);
-  box(room, .045, .10, 4.7, trim, -2.98, .075, 0);
+  box(room, w, .10, .045, trim, 0, .075, -d / 2 + (metric ? .02 : .06));
+  box(room, .045, .10, d - .1, trim, -w / 2 + .02, .075, 0);
   for (const wall of ["left", "back"] as const) {
     const root = new THREE.Group(); root.name = `wall-${wall}`;
-    if (wall === "left") { root.position.x = -3.07; root.rotation.y = Math.PI / 2; }
-    else root.position.z = -2.43;
+    if (wall === "left") { root.position.x = -w / 2 - .07; root.rotation.y = Math.PI / 2; }
+    else root.position.z = -d / 2 - (metric ? .07 : .03);
     room.add(root);
     const windows = architecture.windows.filter(w => w.wall === wall).map(w => ({ ...w, offset: wall === "left" ? -w.offset : w.offset }));
-    plannedWall(root, ctx, wall === "left" ? 4.88 : 6.24, windows);
+    plannedWall(root, ctx, wall === "left" ? d + .08 : w + .24, windows, h + .08);
   }
   return {};
 }
 
-function plannedWall(root: THREE.Group, ctx: ModelContext, width: number, windows: RoomWindow[]) {
+function plannedWall(root: THREE.Group, ctx: ModelContext, width: number, windows: RoomWindow[], height = 3.08) {
   const { box, mesh, materials, plaster, paleWood } = ctx;
   const cutsX = [...new Set([-width / 2, width / 2, ...windows.flatMap(w => [w.offset - w.width / 2, w.offset + w.width / 2])])].sort((a, b) => a - b);
-  const cutsY = [...new Set([0, 3.08, ...windows.flatMap(w => [w.bottom, w.bottom + w.height])])].sort((a, b) => a - b);
+  const cutsY = [...new Set([0, height, ...windows.flatMap(w => [w.bottom, w.bottom + w.height])])].sort((a, b) => a - b);
   for (let x = 0; x < cutsX.length - 1; x++) for (let y = 0; y < cutsY.length - 1; y++) {
     const centerX = (cutsX[x] + cutsX[x + 1]) / 2, centerY = (cutsY[y] + cutsY[y + 1]) / 2;
     if (windows.some(w => Math.abs(centerX - w.offset) < w.width / 2 && centerY > w.bottom && centerY < w.bottom + w.height)) continue;

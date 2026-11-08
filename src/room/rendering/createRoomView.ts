@@ -25,7 +25,7 @@ export function createRoomView(container: HTMLElement, options: {
   onOpen: (id: "sunset-frame" | "sealed-letter") => void;
   onLamp: (on: boolean) => void;
   onAudioRequest: () => void;
-  onError: () => void;
+  onError: (message?: string) => void;
   onFocusChange: (id: RoomObjectId | null) => void;
 }): RoomView {
   const definition = options.definition ?? defaultRoom;
@@ -69,10 +69,13 @@ export function createRoomView(container: HTMLElement, options: {
   const sun = new THREE.DirectionalLight(lighting.sun.color, lighting.sun.intensity);
   sun.position.set(...lighting.sun.position); sun.target.position.set(...lighting.sun.target);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: .1, far: 18 });
+  const shadowSpan = Math.max(5, definition.dimensions[0] * .85, definition.dimensions[2] * .85);
+  Object.assign(sun.shadow.camera, { left: -shadowSpan, right: shadowSpan, top: shadowSpan, bottom: -shadowSpan, near: .1, far: Math.max(18, sun.position.length() + Math.hypot(...definition.dimensions) + 4) });
   sun.shadow.normalBias = .025; sun.shadow.bias = -.00015;
   scene.add(sun, sun.target);
   const model = buildRoom(requestRender, definition); scene.add(model.room);
+  let modelsReady = false;
+  void model.ready.then(() => { if (!disposed) { modelsReady = true; requestRender(); } }).catch(error => { if (!disposed) options.onError(error instanceof Error ? error.message : undefined); });
   const focus = createObjectFocus(camera, controls, model.targets, {
     viewport: () => { const { x, y, width, height } = canvas.getBoundingClientRect(); return { x, y, width, height }; },
     invalidate: requestRender, onChange: options.onFocusChange,
@@ -87,7 +90,7 @@ export function createRoomView(container: HTMLElement, options: {
       if (disposed) return;
       focus.update(now); controls.update(); renderer.render(scene, camera);
       if (focus.animating) requestRender();
-      if (!rendered) { rendered = true; options.onReady(); }
+      if (!rendered && modelsReady) { rendered = true; options.onReady(); }
     });
   }
   function reset() {

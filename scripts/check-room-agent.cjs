@@ -9,6 +9,8 @@ const { generateRoom, mimoConfig } = require('../.room-qa/agent-state/lib/server
 const route = require('../.room-qa/agent-state/app/api/room-agent/route.js');
 const { withWallPhoto } = require('../.room-qa/agent-state/room/wallPhoto.js');
 const { validateRoomDefinition } = require('../.room-qa/agent-state/room/definition.js');
+const { validateRoomReference } = require('../.room-qa/agent-state/lib/server/roomReference.js');
+const { fitReferenceDesign } = require('../.room-qa/agent-state/room/agent/fitReference.js');
 const baseline = JSON.stringify(defaultRoom);
 const clone = () => defaultRoomDesign();
 const reply = (design = clone()) => Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(design) } }], usage: { total_tokens: 123 } });
@@ -99,12 +101,129 @@ const post = (body, headers = {}) => new Request('http://localhost/api/room-agen
     assert.equal(JSON.stringify(success).includes(process.env.MIMO_API_KEY), false);
     assert.equal((await route.POST(post({ prompt: 'loopback hostname normalization' }, { origin: 'http://127.0.0.1', host: '127.0.0.1' }))).status, 200);
 
+    // Header-level JPEG fixture for the transport validator; browser/live tests use a decoded real image.
+    const referenceImage = 'data:image/jpeg;base64,' + Buffer.from([255, 216, 255, 192, 0, 11, 8, 0, 16, 0, 16, 1, 1, 17, 0, 255, 217]).toString('base64');
+    validateRoomReference(referenceImage);
+    const referenceReply = () => reply({ ...clone(), reference: { isRoom: true, observation: '照片中有浅色墙面与绿色沙发。' } });
+    global.fetch = async (url, options) => { calls.push({ url, options }); return referenceReply(); };
+    const photoResponse = await route.POST(post({ referenceImage }));
+    assert.equal(photoResponse.status, 200);
+    const fromPhoto = await photoResponse.json();
+    assert.equal(fromPhoto.run.input, 'image');
+    assert.equal(fromPhoto.run.referenceDescription, '照片中有浅色墙面与绿色沙发。');
+    assert.ok(!JSON.stringify(fromPhoto).includes(referenceImage), 'Raw reference is never persisted or exported with results');
+    const photoSent = JSON.parse(calls.at(-1).options.body);
+    assert.equal(photoSent.messages[1].content[0].type, 'image_url');
+    assert.equal(photoSent.messages[1].content[0].image_url.url, referenceImage);
+    assert.ok(photoSent.messages[1].content[1].text.includes('参考'));
+    const photoWithText = await generateRoom('保留布局，把沙发改成绿色', undefined, referenceImage);
+    assert.equal(photoWithText.run.input, 'image');
+    assert.equal(JSON.parse(calls.at(-1).options.body).messages[1].content[1].text, '保留布局，把沙发改成绿色');
+    for (const invalid of ['https://example.com/private.jpg', 'data:image/svg+xml;base64,PHN2Zz4=', 'data:image/jpeg;base64,YWJj', referenceImage + '!', 'x'.repeat(1_600_001), 42, null]) {
+      const before = calls.length;
+      assert.equal((await route.POST(post({ prompt: 'test', referenceImage: invalid }))).status, 400);
+      assert.equal(calls.length, before, 'Invalid images never reach the provider');
+    }
+    const tooWide = Buffer.from([255, 216, 255, 192, 0, 11, 8, 0, 16, 8, 0, 1, 1, 17, 0, 255, 217]);
+    assert.throws(() => validateRoomReference('data:image/jpeg;base64,' + tooWide.toString('base64')), /尺寸/);
+    assert.equal((await route.POST(post({ referenceImage: 'x'.repeat(1_620_000) }))).status, 413);
+    global.fetch = async () => reply({ reference: { isRoom: false, observation: '不是房间' } });
+    await assert.rejects(generateRoom('', undefined, referenceImage), e => e.code === 'NOT_A_ROOM');
+    const imageRepairCalls = [];
+    global.fetch = async (url, options) => { imageRepairCalls.push(JSON.parse(options.body)); return imageRepairCalls.length === 1 ? reply({}) : referenceReply(); };
+    const photoRepaired = await generateRoom('修复图片方案', undefined, referenceImage);
+    assert.equal(photoRepaired.run.attempts, 2);
+    assert.equal(imageRepairCalls[1].messages[1].content[0].image_url.url, referenceImage, 'Repair retains the same reference image');
+    const nearWall = { ...clone(), version: 2, dimensions: [6, 3, 4.8], architecture: { units: 'meters', windows: [] }, furniture: [{ id: 'desk-photo', type: 'desk', x: 2.1, z: 0, rotation: 0 }], reference: { isRoom: true, observation: '一张靠墙的木书桌。' } };
+    assert.throws(() => roomFromDesign(nearWall), /crosses a wall/);
+    const fitted = fitReferenceDesign(nearWall);
+    assert.equal(fitted.corrections, 1); roomFromDesign(fitted.input);
+    assert.equal(nearWall.furniture[0].x, 2.1, 'Wall fitting does not mutate model output');
+    global.fetch = async () => reply(nearWall);
+    const adjustedPhoto = await generateRoom('', undefined, referenceImage);
+    assert.equal(adjustedPhoto.run.positionCorrections, 1);
+    const adjustedText = await generateRoom('一张靠墙的书桌');
+    assert.equal(adjustedText.run.positionCorrections, 1, 'Text generation also corrects small wall-margin errors before strict validation');
+    const far = structuredClone(nearWall); far.furniture[0].x = 10;
+    assert.equal(fitReferenceDesign(far).corrections, 0, 'Large placement errors still fail normal validation');
+    const colliding = structuredClone(nearWall); colliding.furniture.push({ ...colliding.furniture[0], id: 'desk-second' });
+    assert.throws(() => roomFromDesign(fitReferenceDesign(colliding).input), /overlaps/);
+    const smallTable = { ...nearWall, furniture: [{ id: 'photo-side', type: 'nightstand', size: [.66, .6025, .6], x: 0, z: 0, rotation: 0 }] };
+    const packed = roomFromDesign(smallTable).definition;
+    for (const id of ['cd', 'envelope', 'lamp']) assert.equal(packed.nodes.find(n => n.id === id).parent, 'photo-side');
+    assert.ok(packed.nodes.find(n => n.id === 'cd').scale[0] < .85, 'Packing retries earlier objects at smaller scales to leave space for the lamp');
+    validateRoomDefinition(packed);
+    const insufficient = structuredClone(smallTable); insufficient.furniture[0].size = [.4, .4, .35];
+    assert.throws(() => roomFromDesign(insufficient), /Not enough tabletop space/);
+    global.fetch = async () => new Response('provider detail', { status: 400 });
+    await assert.rejects(generateRoom('', undefined, referenceImage), e => e.code === 'IMAGE_REJECTED');
+
     let count = 0;
     global.fetch = async () => ++count === 1 ? reply({}) : reply();
     const repaired = await generateRoom('修正布局');
     assert.equal(repaired.run.attempts, 2); assert.equal(repaired.run.totalTokens, 246);
-    global.fetch = async () => reply({});
-    await assert.rejects(generateRoom('bad'), e => e.code === 'INVALID_DESIGN');
+    const rounds = [];
+    global.fetch = async (url, options) => {
+      rounds.push(JSON.parse(options.body));
+      return rounds.length < 12 ? reply({}) : reply();
+    };
+    const continued = await generateRoom('持续修复，不能删掉主要家具');
+    assert.equal(continued.run.attempts, 12, 'Validation failures keep repairing beyond the former two-call cap');
+    assert.equal(continued.run.totalTokens, 12 * 123);
+    assert.ok(rounds.every(r => r.messages.length <= 4), 'Repairs retain only the latest candidate and bounded error feedback');
+    assert.match(rounds[3].messages.at(-1).content, /同一错误已重复/);
+    assert.match(rounds.at(-1).messages.at(-1).content, /不能删掉主要物件/);
+    assert.equal(rounds.at(-1).messages[1].content, '持续修复，不能删掉主要家具');
+    const stopRepairs = new AbortController(); let failedRounds = 0;
+    global.fetch = async () => { if (++failedRounds === 5) stopRepairs.abort(); return reply({}); };
+    await assert.rejects(generateRoom('bad', stopRepairs.signal), e => e.code === 'TIMEOUT');
+    assert.equal(failedRounds, 5, 'Repeatedly invalid designs stop when cancelled');
+
+    // The workbench continues one call per request, so request deadlines do not cap the whole repair workflow.
+    const sessionCalls = [];
+    const overlapDesign = clone(); overlapDesign.furniture[0].x = 0; overlapDesign.furniture[0].z = .3;
+    global.fetch = async (url, options) => {
+      sessionCalls.push(JSON.parse(options.body));
+      return sessionCalls.length <= 3 ? reply({ ...overlapDesign, reference: { isRoom: true, observation: '保留原布局。' } }) : referenceReply();
+    };
+    response = await route.POST(post({ continuous: true, referenceImage }));
+    assert.equal(response.status, 202);
+    const session = await response.json();
+    assert.equal(session.attempts, 0);
+    assert.equal(sessionCalls.length, 0, 'Starting a continuation does not detach work from a request');
+    assert.ok(!JSON.stringify(session).includes(referenceImage));
+    assert.ok(!JSON.stringify(session).includes(process.env.MIMO_API_KEY));
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      response = await route.POST(post({ generationId: session.generationId }));
+      const value = await response.json();
+      assert.equal(response.status, attempt === 4 ? 200 : 202);
+      if (attempt < 4) {
+        assert.equal(value.attempts, attempt);
+        assert.match(value.message, /间距/);
+        assert.ok(!JSON.stringify(value).includes(referenceImage));
+      } else { assert.equal(value.run.attempts, 4); assert.equal(value.run.totalTokens, 492); }
+    }
+    assert.equal(sessionCalls[3].messages[1].content[0].image_url.url, referenceImage);
+    assert.equal((await route.POST(post({ generationId: session.generationId }))).status, 410, 'Finished sessions are released');
+    assert.equal((await route.POST(post({ generationId: 'invalid' }))).status, 400);
+    assert.equal((await route.POST(post({ generationId: session.generationId }, { origin: 'https://elsewhere.test' }))).status, 403);
+
+    const cancelSession = await (await route.POST(post({ continuous: true, prompt: '取消持续修复' }))).json();
+    let sawProviderAbort = false, markStarted;
+    const providerStarted = new Promise(resolve => { markStarted = resolve; });
+    global.fetch = async (url, options) => new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => { sawProviderAbort = true; reject(new Error('aborted')); }, { once: true });
+      markStarted();
+    });
+    const inFlight = route.POST(post({ generationId: cancelSession.generationId }));
+    await providerStarted;
+    assert.equal((await route.POST(post({ generationId: cancelSession.generationId }))).status, 409, 'Duplicate continuation never starts another model call');
+    const deletion = (origin) => new Request(`http://localhost/api/room-agent?id=${cancelSession.generationId}`, { method: 'DELETE', headers: origin ? { origin } : {} });
+    assert.equal(route.DELETE(deletion('https://elsewhere.test')).status, 403);
+    assert.equal(route.DELETE(deletion()).status, 200);
+    assert.equal((await inFlight).status, 504);
+    assert.equal(sawProviderAbort, true, 'Cancel aborts the in-flight provider call');
+    assert.equal((await route.POST(post({ generationId: cancelSession.generationId }))).status, 410, 'Cancelled generations cannot be resumed');
     for (const [status, code] of [[401, 'AUTH_ERROR'], [403, 'AUTH_ERROR'], [429, 'RATE_LIMITED'], [500, 'UPSTREAM_ERROR']]) {
       global.fetch = async () => new Response('test-secret-do-not-leak', { status });
       response = await route.POST(post({ prompt: 'test' }));
@@ -114,6 +233,9 @@ const post = (body, headers = {}) => new Request('http://localhost/api/room-agen
     await assert.rejects(generateRoom('network'), e => e.code === 'NETWORK_ERROR' && !e.message.includes('provider secret'));
     const cancelled = new AbortController(); cancelled.abort();
     await assert.rejects(generateRoom('cancel', cancelled.signal), e => e.code === 'TIMEOUT');
+    global.fetch = async () => ({ ok: true, json: async () => { throw new Error('body unavailable'); } });
+    await assert.rejects(generateRoom('body timeout', cancelled.signal), e => e.code === 'TIMEOUT', 'Aborted response-body reads are timeouts, not malformed provider responses');
+    await assert.rejects(generateRoom('invalid response body'), e => e.code === 'INVALID_RESPONSE');
     for (const body of [{}, { prompt: '' }, { prompt: ' '.repeat(10) }, { prompt: 1 }, { prompt: 'x'.repeat(2001) }]) assert.equal((await route.POST(post(body))).status, 400);
     assert.equal((await route.POST(post({ prompt: 'x'.repeat(13_000) }))).status, 413);
     assert.equal((await route.POST(post({ prompt: 'test' }, { origin: 'https://elsewhere.test' }))).status, 403);
@@ -128,5 +250,7 @@ const post = (body, headers = {}) => new Request('http://localhost/api/room-agen
     assert.equal((await route.POST(post({ prompt: 'three' }))).status, 429);
     release(); assert.equal((await first).status, 200); assert.equal((await second).status, 200);
     console.log('PASS: room design compilation, immutable defaults, bounds/overlap validation, MiMo protocol, repair, no key leakage, errors, input limits, origin checks and concurrency');
+    console.log('PASS: image-only/text+image, JPEG budgets, no remote image fetch, visual observation, non-room rejection, image-aware repair and no raw image in result');
+    console.log('PASS: 12-round repair, bounded context, repeated-error feedback, multi-request progress, image retention, cancellation, session cleanup and duplicate-call protection');
   } finally { global.fetch = originalFetch; process.env = oldEnv; }
 })().catch(error => { console.error(error); process.exit(1); });

@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { materialIds, type MaterialId, type RoomDefinition } from "../types";
 
 export interface ModelBehavior {
+  ready?: Promise<void>;
   setAudioPlaying?: (playing: boolean) => void;
   toggleLamp?: () => boolean;
   setPhoto?: (content: PhotoFrameContent) => void;
@@ -44,6 +45,18 @@ export function createModelContext(definition: RoomDefinition, onChange: () => v
     const spec = definition.materials[id];
     return [id, material(spec.color, spec.roughness, spec.texture ? texture(spec.texture.kind, spec.texture.color) : undefined)];
   })) as Record<MaterialId, THREE.MeshStandardMaterial>;
+  const overrides = new Map<string, THREE.MeshStandardMaterial>();
+  function paletteFor(colors: Partial<Record<MaterialId, string>>) {
+    const result = { ...palette };
+    for (const id of materialIds) {
+      const color = colors[id];
+      if (!color) continue;
+      const key = `${id}:${color}`, spec = definition.materials[id];
+      if (!overrides.has(key)) overrides.set(key, material(spec.texture ? "#ffffff" : color, spec.roughness, spec.texture ? texture(spec.texture.kind, color) : undefined));
+      result[id] = overrides.get(key)!;
+    }
+    return result;
+  }
 
   function mesh(geometry: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x: number, y: number, z: number) {
     geometries.add(geometry);
@@ -65,7 +78,7 @@ export function createModelContext(definition: RoomDefinition, onChange: () => v
     return mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 24, radius, 8, false), mat, parent, 0, 0, 0);
   }
   return {
-    ...palette, random, material, mesh, box, cylinder, ellipsoid, tube,
+    ...palette, random, material, mesh, box, cylinder, ellipsoid, tube, paletteFor,
     materials, textures, geometries, onChange,
     dispose() {
       geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose());

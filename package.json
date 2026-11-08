@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check-state.cjs"
+    "test": "node scripts/check-state.cjs",
+    "prepare:pets": "node scripts/prepare-pet-library.cjs",
+    "test:pets": "node scripts/check-pet-agent.cjs"
   },
   "dependencies": {
     "next": "16.4.5",
@@ -21,6 +23,8 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/three": "^0.187.0",
+    "meshoptimizer": "1.1.1",
+    "sharp": "0.35.5",
     "typescript": "7.0.2"
   }
 }

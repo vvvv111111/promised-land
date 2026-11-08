@@ -1,23 +1,38 @@
 import { defaultRoom, validateRoomDefinition } from "../definition";
-import { materialIds, type MaterialId, type RoomArchitecture, type RoomDefinition, type RoomNode } from "../types";
-import { furnitureCatalog, furnitureIds, type FurnitureId } from "../furnitureCatalog";
+import { materialIds, type GeneratedAsset, type MaterialId, type RoomArchitecture, type RoomDefinition, type RoomNode, type Vec3, type WallMount } from "../types";
+import { furnitureCatalog, furnitureIds, furnitureMaterials, furnitureSize, validateFurnitureSize, type FurnitureId } from "../furnitureCatalog";
 import { parseArchitecture } from "../architecture";
 import { withWallPhoto } from "../wallPhoto";
+import { boxesIntersect } from "../spatial";
+import { compileModernDesign } from "./compile";
+import { MAX_GENERATED_PARTS, parseGeneratedAsset } from "../generated";
+
+export interface DesignFurniture {
+  id: string; type?: FurnitureId | "custom"; asset?: string;
+  size?: Vec3; colors?: Partial<Record<MaterialId, string>>;
+  x: number; z: number; rotation: number;
+  /** x/z are local to this support. The compiler derives y from its real top. */
+  parent?: string; surface?: string;
+  mount?: WallMount;
+}
 
 export const movableIds = ["sofa", "table", "cabinet", "floor-plant", "rug"] as const;
 export type MovableId = typeof movableIds[number];
 export interface RoomDesign {
+  version?: 2;
+  dimensions?: Vec3;
   summary: string;
   limitations: string[];
   palette: Record<MaterialId, string>;
   architecture?: RoomArchitecture;
-  furniture: { id: FurnitureId; x: number; z: number; rotation: number }[];
+  assets?: Record<string, GeneratedAsset>;
+  furniture: DesignFurniture[];
   lighting: { sunColor: string; intensity: number; ambient: number; exposure: number };
 }
 export interface RoomAgentResult {
   design: RoomDesign;
   definition: RoomDefinition;
-  run: { id: string; model: string; attempts: number; durationMs: number; totalTokens: number };
+  run: { id: string; model: string; attempts: number; durationMs: number; totalTokens: number; input?: "text" | "image"; referenceDescription?: string; positionCorrections?: number };
 }
 
 const object = (v: unknown): Record<string, unknown> => {
@@ -37,24 +52,71 @@ const color = (v: unknown): string => {
   return v;
 };
 
-/** Pick only supported data; model output can never supply code, assets or model factories. */
+/** Pick supported data only; generated assets are geometry recipes, never executable code. */
 export function parseRoomDesign(input: unknown): RoomDesign {
   const data = object(input), palette = object(data.palette), light = object(data.lighting);
+  if (data.version !== undefined && data.version !== 2) throw new Error("unsupported design version");
+  const modern = data.version === 2;
+  let dimensions: Vec3 = [6, 3, 4.8];
+  if (modern && data.dimensions !== undefined) {
+    if (!Array.isArray(data.dimensions) || data.dimensions.length !== 3) throw new Error("dimensions must be [width,height,depth]");
+    dimensions = [numeric(data.dimensions[0], 3, 12), numeric(data.dimensions[1], 2.4, 5), numeric(data.dimensions[2], 3, 12)];
+  }
   if (!Array.isArray(data.limitations) || data.limitations.length > 5) throw new Error("invalid limitations");
-  if (!Array.isArray(data.furniture) || data.furniture.length < 1 || data.furniture.length > furnitureIds.length) throw new Error("expected 1..11 furniture placements");
+  if (!Array.isArray(data.furniture) || data.furniture.length < 1 || data.furniture.length > (modern ? 32 : furnitureIds.length)) throw new Error("invalid furniture count");
+  const assets: Record<string, GeneratedAsset> = Object.create(null);
+  if (data.assets !== undefined) {
+    if (!modern) throw new Error("generated assets require version:2");
+    const entries = Object.entries(object(data.assets));
+    if (entries.length > 24) throw new Error("at most 24 generated asset definitions");
+    for (const [id, value] of entries) {
+      if (!/^[a-z][a-z0-9-]{0,63}$/.test(id)) throw new Error("invalid generated asset id");
+      try { assets[id] = parseGeneratedAsset(value); }
+      catch (error) { throw new Error(`asset ${id}: ${error instanceof Error ? error.message : "invalid generated geometry"}`); }
+    }
+  }
   const seen = new Set<string>();
-  const furniture = data.furniture.map(value => {
+  const furniture = data.furniture.map((value): DesignFurniture => {
     const item = object(value);
-    if (!furnitureIds.includes(item.id as FurnitureId) || seen.has(item.id as string)) throw new Error("unknown or duplicate furniture id");
+    const type = (modern ? item.type : item.id) as FurnitureId | "custom";
+    if (!(modern && type === "custom") && !furnitureIds.includes(type as FurnitureId) || typeof item.id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(item.id) || ["shell", "cd", "envelope", "frame", "lamp"].includes(item.id) || seen.has(item.id)) throw new Error("unknown type or duplicate/reserved furniture id");
     seen.add(item.id as string);
-    return { id: item.id as FurnitureId, x: numeric(item.x, -3, 3), z: numeric(item.z, -2.4, 2.4), rotation: numeric(item.rotation, -Math.PI, Math.PI) };
+    const placement = { id: item.id, x: numeric(item.x, -dimensions[0] / 2, dimensions[0] / 2), z: numeric(item.z, -dimensions[2] / 2, dimensions[2] / 2), rotation: numeric(item.rotation, -Math.PI, Math.PI) };
+    let support: Pick<DesignFurniture, "parent" | "surface"> = {};
+    if (modern && (item.parent !== undefined || item.surface !== undefined)) {
+      for (const id of [item.parent, item.surface]) if (typeof id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(id)) throw new Error("parent and surface must both name real furniture/supports");
+      support = { parent: item.parent as string, surface: item.surface as string };
+    }
+    if (modern && type === "custom") {
+      if (typeof item.asset !== "string" || !Object.hasOwn(assets, item.asset)) throw new Error(`${item.id} needs a defined generated asset`);
+      if (item.size !== undefined || item.colors !== undefined || item.y !== undefined) throw new Error("custom asset uses part sizes/colors; elevation is derived from parent/surface, not y");
+      let mount: WallMount | undefined;
+      if (item.mount !== undefined) {
+        const m = object(item.mount);
+        if (m.wall !== "left" && m.wall !== "back" || item.parent !== undefined) throw new Error("custom wall mount requires left/back wall without a furniture parent");
+        mount = { wall: m.wall, offset: numeric(m.offset, -6, 6), bottom: numeric(m.bottom, 0, 5) };
+      }
+      return { ...placement, type, asset: item.asset, ...support, ...(mount ? { mount } : {}) };
+    }
+    if (item.mount !== undefined) throw new Error("mount requires a custom asset");
+    const colors: Partial<Record<MaterialId, string>> = {};
+    if (modern && item.colors !== undefined) for (const [id, value] of Object.entries(object(item.colors))) {
+      if (!(materialIds as readonly string[]).includes(id)) throw new Error("unknown furniture material");
+      if (!furnitureMaterials[type as FurnitureId].includes(id as MaterialId)) throw new Error(`${item.id} (${type}) does not use ${id}; its visible materials are ${furnitureMaterials[type as FurnitureId].join(",")}`);
+      colors[id as MaterialId] = color(value);
+    }
+    if (modern && item.y !== undefined) throw new Error("elevation is derived from parent/surface, not y");
+    return { ...placement, ...(modern ? { type, size: item.size === undefined ? furnitureSize(type as FurnitureId) : validateFurnitureSize(type as FurnitureId, item.size), ...(item.colors === undefined ? {} : { colors }), ...support } : {}) };
   });
-  if (!["desk", "table", "cabinet"].some(id => seen.has(id))) throw new Error("include a desk, table or cabinet to support the CD player, letter and photo frame");
+  if (furniture.reduce((count, n) => count + (n.type === "custom" ? assets[n.asset!].parts.length : 0), 0) > MAX_GENERATED_PARTS) throw new Error("generated room exceeds 384 instantiated parts; simplify detail, preserve major structure");
+  if (!furniture.some(n => ["desk", "table", "cabinet", ...(modern ? ["dining-table", "nightstand"] : [])].includes(n.type ?? n.id) || n.type === "custom" && assets[n.asset!].supports?.length)) throw new Error("include real supporting furniture/surfaces for the CD player, letter and lamp");
   const design: RoomDesign = {
+    ...(modern ? { version: 2 as const, dimensions } : {}),
     summary: text(data.summary, 240), limitations: data.limitations.map(v => text(v, 160)),
     palette: Object.fromEntries(materialIds.map(id => [id, color(palette[id])])) as RoomDesign["palette"],
     furniture,
-    ...(data.architecture === undefined ? {} : { architecture: parseArchitecture(data.architecture) }),
+    ...(Object.keys(assets).length ? { assets } : {}),
+    ...(modern ? { architecture: parseArchitecture({ ...object(data.architecture ?? { windows: [] }), units: "meters" }, dimensions) } : data.architecture === undefined ? {} : { architecture: parseArchitecture(data.architecture) }),
     lighting: { sunColor: color(light.sunColor), intensity: numeric(light.intensity, .5, 5), ambient: numeric(light.ambient, .5, 3), exposure: numeric(light.exposure, .7, 1.5) },
   };
   validatePlacements(design);
@@ -62,20 +124,26 @@ export function parseRoomDesign(input: unknown): RoomDesign {
 }
 
 function validatePlacements(design: RoomDesign) {
+  const dimensions = design.dimensions ?? [6, 3, 4.8];
   const boxes = design.furniture.map(item => {
-    const { width, depth } = furnitureCatalog[item.id], c = Math.cos(item.rotation), s = Math.sin(item.rotation);
+    if (item.type === "custom" || item.parent) return undefined; // Piecewise 3D/support validation runs after compilation.
+    const type = item.type ?? item.id as FurnitureId;
+    const width = item.size?.[0] ?? furnitureCatalog[type].width, depth = item.size?.[2] ?? furnitureCatalog[type].depth, c = Math.cos(item.rotation), s = Math.sin(item.rotation);
     // The established rug geometry is offset from its node's origin.
-    const x = item.x + (item.id === "rug" ? -.6 * c + .48 * s : 0);
-    const z = item.z + (item.id === "rug" ? .6 * s + .48 * c : 0);
+    const x = item.x + (type === "rug" && !item.size ? -.6 * c + .48 * s : 0);
+    const z = item.z + (type === "rug" && !item.size ? .6 * s + .48 * c : 0);
     const halfX = (Math.abs(c) * width + Math.abs(s) * depth) / 2;
     const halfZ = (Math.abs(s) * width + Math.abs(c) * depth) / 2;
-    if (Math.abs(x) + halfX > 2.95 || Math.abs(z) + halfZ > 2.35) throw new Error(`${item.id} crosses a wall; move it inside x ±2.95, z ±2.35 including its footprint`);
-    return { ...item, x, z, halfX, halfZ };
+    if (Math.abs(x) + halfX > dimensions[0] / 2 - .05 || Math.abs(z) + halfZ > dimensions[2] / 2 - .05) throw new Error(`${item.id} crosses a wall; include its rotated footprint within the room`);
+    const points: Vec3[] = [];
+    for (const dx of [-width / 2, width / 2]) for (const y of [0, item.size?.[1] ?? 1]) for (const dz of [-depth / 2, depth / 2]) points.push([x + dx * c + dz * s, y, z - dx * s + dz * c]);
+    return { ...item, type, x, z, halfX, halfZ, points };
   });
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
     const a = boxes[i], b = boxes[j];
-    if (a.id === "rug" || b.id === "rug") continue;
-    if (Math.abs(a.x - b.x) < a.halfX + b.halfX + .04 && Math.abs(a.z - b.z) < a.halfZ + b.halfZ + .04) {
+    if (!a || !b) continue;
+    if (a.type === "rug" || b.type === "rug") continue;
+    if (design.version === 2 ? boxesIntersect(a.points, b.points, -.04) : Math.abs(a.x - b.x) < a.halfX + b.halfX + .04 && Math.abs(a.z - b.z) < a.halfZ + b.halfZ + .04) {
       throw new Error(`${a.id} overlaps ${b.id}; separate their bounding rectangles by at least 0.04m`);
     }
   }
@@ -84,6 +152,7 @@ function validatePlacements(design: RoomDesign) {
 /** Compile a small design contract to the existing serializable rendering contract. */
 export function roomFromDesign(input: unknown): { design: RoomDesign; definition: RoomDefinition } {
   const design = parseRoomDesign(input);
+  if (design.version === 2) return compileModernDesign(design);
   let definition = structuredClone(defaultRoom);
   definition.id = "mimo-room-v2";
   if (design.architecture) definition.architecture = design.architecture;
@@ -103,7 +172,7 @@ export function roomFromDesign(input: unknown): { design: RoomDesign; definition
   for (const placement of design.furniture) {
     let node = definition.nodes.find(node => node.id === placement.id);
     if (!node) {
-      const spec = furnitureCatalog[placement.id];
+      const spec = furnitureCatalog[placement.id as FurnitureId];
       node = { id: placement.id, model: spec.model, position: [0, 0, 0] };
       if ("top" in spec) node.surfaces = [{ id: "top", position: [0, spec.top, 0], size: [...spec.surface] }];
       definition.nodes.push(node);

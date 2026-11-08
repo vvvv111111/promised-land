@@ -30,6 +30,8 @@
 | `lib/media` | 照片压缩与音频内容检查，不负责持久化 |
 | `lib/storage` | CD 音频的 IndexedDB 存取 |
 | `room/agent` | MiMo 房间设计契约、提示词、布局校验与 RoomDefinition 编译 |
+| `room/generated.ts`、`room/models/generated.ts` | 自建几何素材协议、真实承托面、部件碰撞范围与网格渲染 |
+| `room/agent/composerSkill.ts`、`.agents/skills/room-composer` | MiMo 运行时素材创作/布局规则与项目维护 skill |
 | `lib/server/roomAgent.ts`、`app/api/room-agent` | 服务端 MiMo 配置、调用、校验修正和安全错误返回 |
 | `components/room3d/RoomAgentWorkbench.tsx` | 文字需求、生成、取消、本机保存、方案导出与运行记录 |
 
@@ -47,7 +49,7 @@
 
 ## 房间数据契约
 
-`RoomDefinition` 是 JSON 数据：版本、尺寸、随机种子、材质、模型节点、父子关系、位置/旋转/缩放、支撑面、交互 ID、灯光和初始镜头。当前模型库支持矩形房间与已有家具。尺寸调整仅缩放壳体，家具布局由节点明确给出，不会自动重新排布。
+`RoomDefinition` 是 JSON 数据：版本、尺寸、随机种子、材质、模型节点、父子关系、位置/旋转/缩放、支撑面、交互 ID、灯光和初始镜头。节点可使用已有模型或自建声明式几何，布局由节点明确给出；新版壳体与家具均按米制尺寸构建，不自动任意重排。自建素材的部件、颜色及承托定义与场景一起保存，不需要读取外部素材或执行模型代码。
 
 CD 机、相框、信封是必需交互物品，分别绑定 `cd-player`、`sunset-frame`、`sealed-letter`；台灯绑定 `lamp`。桌子和柜子提供有位置与宽深的 `top` 支撑面，CD、信封和台灯声明父节点和支撑面，移动父节点会带动物品。相框使用 `wall: back/left`，贴合实墙并朝向室内；`wallMount.ts` 描述墙面与窗洞，`wallPhoto.ts` 在低家具上方安排不遮窗、不被高柜遮挡的位置。生成方案保存完整挂墙位置；旧桌面相框只在渲染前适配，不回写原方案。模型工厂仅按挂墙标记去掉桌面支架，不决定摆放。
 
@@ -73,6 +75,6 @@ CD 机、相框、信封是必需交互物品，分别绑定 `cd-player`、`suns
 
 集成前已验证：八页流程、相框/信件、固定物品、3D 原生点击、镜头与手机手势、物品特写、CD 上传与保存失败回退。重构前后桌面/手机的首页、房间、CD 特写、相框特写共 8 张截图像素差异为 0。
 
-独立 `/room-3d` 和主流程编辑页共用房间 Agent，通过服务端 MiMo 接口输出经过校验的设计数据，再编译为 `RoomDefinition`，不直接修改页面或操纵 DOM。主流程保存到当前礼物，独立工作台保留自己的方案键；生成/保存未完成时主流程阻止完成与预览。配置、能力范围与验证见 [房间 Agent](room-agent.md)。宠物 Agent、照片重建、服务端数据库和分享仍待接入；没有部署或推送。
+独立 `/room-3d` 和主流程编辑页共用房间 Agent，通过服务端 MiMo 接口输出经过校验的设计数据，再编译为 `RoomDefinition`，不直接修改页面或操纵 DOM。主流程保存到当前礼物，独立工作台保留自己的方案键；生成/保存未完成时主流程阻止完成与预览。宠物 Agent 已由 `PetAgentPanel → /api/pet-agent → Python` 接入；`composePet.ts` 负责物理合并，`models/petGlb.ts` 负责测量与渲染，`petAssetStore.ts` 负责二进制存储和完整导出。配置与边界见 [房间 Agent](room-agent.md)和[宠物 Agent](pet-agent.md)。服务端数据库和分享仍待接入；没有部署或推送。
 
 本轮回归增加并发目标字段合并、过期快照拒绝、房间绑定、失败回退与示例隔离；测试脚本固定编译根路径，避免误读旧产物。浏览器 `check-gift-flow-browser.cjs` 覆盖 3D 八页闭环与桌面/手机，`check-gift-concurrency-browser.cjs` 覆盖真实双页面冲突和未保存导航保护。Agent 浏览器回归使用模拟响应，不产生模型调用费用。

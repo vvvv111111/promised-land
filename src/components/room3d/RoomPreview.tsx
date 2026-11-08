@@ -36,6 +36,7 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
   const [content, setContent] = useState<GiftContent | null>(null);
   const [lampOn, setLampOn] = useState(false);
   const [warning, setWarning] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [audioOpen, setAudioOpen] = useState(false);
   const [editable, setEditable] = useState(false);
   const [focusedObject, setFocusedObject] = useState<RoomObjectId | null>(null);
@@ -44,7 +45,7 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
     let cancelled = false;
     let current: RoomView | undefined;
     async function mount() {
-      setStatus("loading"); setLampOn(false); setWarning("");
+      setStatus("loading"); setLampOn(false); setWarning(""); setLoadError("");
       const currentMode = giftId === EXAMPLE_GIFT_ID ? "recipient" : mode ?? (new URLSearchParams(window.location.search).get("mode") === "recipient" ? "recipient" : "sender");
       setEditable(currentMode === "sender");
       try {
@@ -63,7 +64,7 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
           onLamp: setLampOn,
           onAudioRequest: () => { setAudioOpen(true); if (currentMode === "recipient") events.current.onItemCollected?.("cd-player"); },
           onFocusChange: setFocusedObject,
-          onError: () => { if (!cancelled) { setStatus("error"); events.current.onError?.(); } },
+          onError: message => { if (!cancelled) { setLoadError(message ?? ""); setStatus("error"); events.current.onError?.(); } },
         });
         view.current = current; setWarning(store.warning);
       } catch {
@@ -91,7 +92,7 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
       <div className="room3d-stage" ref={container} aria-busy={status === "loading"}>
         {status === "loading" && <p className="room3d-message" role="status">正在加载房间…</p>}
         {status === "error" && <div className="room3d-message" role="alert">
-          <p>3D 房间未能加载，请重试或使用支持 WebGL 2 的浏览器。</p>
+          <p>{loadError || "3D 房间未能加载，请重试或使用支持 WebGL 2 的浏览器。"}</p>
           <button type="button" onClick={() => setAttempt(value => value + 1)}>重试</button>
         </div>}
       </div>

@@ -1,5 +1,6 @@
 // Uses the same optional Playwright / ROOM_URL / ROOM_CHROMIUM setup as the room checks.
 const { chromium } = require('playwright');
+const { confirmPreview } = require('./room-editor-browser-helpers.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { bedroomRoomDesign, roomFromDesign } = require('../.room-qa/agent-state/room/agent/design.js');
@@ -38,7 +39,7 @@ fs.mkdirSync('.room-qa', { recursive: true });
     // The generated room is bound to this gift and survives route changes.
     await page.getByRole('textbox', { name: '房间描述', exact: true }).fill('安静的卧室，有一张书桌。');
     await page.getByRole('button', { name: '生成房间', exact: true }).click();
-    await page.getByText('已生成并保存到本浏览器。', { exact: true }).waitFor(); await ready();
+    await confirmPreview(page); await ready();
     assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).room, giftKey), fixture.definition);
     assert.equal(await page.evaluate(() => localStorage.getItem('promised-land:room-agent:v1')), null);
     // Explicit room edit request, autosave, manual save, and crop persistence.

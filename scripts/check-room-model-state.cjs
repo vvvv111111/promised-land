@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
   const THREE = await import('three');
   const output = path.resolve('.room-qa/model-state'); fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output, 'package.json'), JSON.stringify({ type: 'module' }));
-  fs.writeFileSync(path.join(output, 'tsconfig.json'), JSON.stringify({ extends: '../../tsconfig.json', compilerOptions: { noEmit: false, incremental: false, outDir: '.', rootDir: '../../src' }, include: ['../../src/room/buildRoom.ts', '../../src/room/agent/design.ts'] }));
+  fs.writeFileSync(path.join(output, 'tsconfig.json'), JSON.stringify({ extends: '../../tsconfig.json', compilerOptions: { noEmit: false, incremental: false, outDir: '.', rootDir: '../../src' }, include: ['../../src/room/buildRoom.ts', '../../src/room/agent/design.ts', '../../src/room/agent/examples.ts', '../../src/room/agent/generatedExample.ts'] }));
   require('node:child_process').execFileSync(process.execPath, [path.resolve('node_modules/typescript/bin/tsc'), '--project', path.join(output, 'tsconfig.json')], { stdio: 'inherit' });
   // Match browser/bundler module resolution in Node without a runtime loader.
   function resolveImports(dir) {
@@ -21,7 +21,7 @@ const { pathToFileURL } = require('node:url');
       }
     }
   }
-  resolveImports(path.join(output, 'room'));
+  resolveImports(output);
   let canvases = 0, changes = 0, lastImage;
   global.document = { createElement() { canvases++; return { width: 0, height: 0, getContext: () => ({ fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, drawImage() {} }) }; } };
   global.Image = class { constructor() { lastImage = this; } width = 100; height = 100; };
@@ -100,6 +100,72 @@ const { pathToFileURL } = require('node:url');
     const extra = buildRoom(() => {}, roomFromDesign(withStorage).definition);
     assert.ok(extra.room.getObjectByName(id).children.length > 5, `Real geometry exists for ${id}`); extra.dispose();
   }
+  const examples = await import(pathToFileURL(path.join(output, 'room/agent/examples.js')));
+  const { furnitureCatalog, furnitureMaterials } = await import(pathToFileURL(path.join(output, 'room/furnitureCatalog.js')));
+  const { createModelContext } = await import(pathToFileURL(path.join(output, 'room/models/context.js')));
+  const { parametricFurniture } = await import(pathToFileURL(path.join(output, 'room/models/parametric.js')));
+  for (const make of Object.values(examples)) {
+    const definition = roomFromDesign(make()).definition, flexible = buildRoom(() => {}, definition);
+    flexible.room.updateMatrixWorld(true);
+    assert.equal(flexible.targets.size, 4);
+    for (const window of definition.architecture.windows) {
+      const wall = flexible.room.getObjectByName('wall-' + window.wall), panels = wall.children.filter(n => n.name === 'wall-panel');
+      const origin = window.wall === 'left' ? new THREE.Vector3(0, window.bottom + window.height * .3, window.offset + window.width * .2) : new THREE.Vector3(window.offset + window.width * .2, window.bottom + window.height * .3, 0);
+      ray.set(origin, window.wall === 'left' ? new THREE.Vector3(-1, 0, 0) : new THREE.Vector3(0, 0, -1));
+      assert.equal(ray.intersectObjects(panels).length, 0, 'Metric windows remain real holes in resized rooms');
+    }
+    const allocated = new Map();
+    flexible.room.traverse(n => {
+      if (!n.isMesh) return;
+      for (const resource of [n.geometry, ...(Array.isArray(n.material) ? n.material : [n.material])].flatMap(r => r.map ? [r, r.map] : [r])) {
+        if (allocated.has(resource)) continue;
+        allocated.set(resource, 0); resource.addEventListener('dispose', () => allocated.set(resource, allocated.get(resource) + 1));
+      }
+    });
+    if (definition.nodes.some(n => n.id === 'desk-left')) {
+      const materialFor = id => { let mat; flexible.room.getObjectByName(id).traverse(n => { if (n.isMesh && n.material.map) mat ??= n.material; }); return mat; };
+      assert.notEqual(materialFor('desk-left'), materialFor('desk-right'), 'Independent furniture colors use independent materials');
+      assert.notEqual(materialFor('desk-left').map, materialFor('desk-right').map);
+    }
+    flexible.dispose(); flexible.dispose();
+    assert.ok([...allocated.values()].every(count => count === 1), 'New furniture and independent color textures are disposed once');
+  }
+  // Check every supported size extreme against actual mesh bounds, not just metadata.
+  const ctx = createModelContext(data, () => {});
+  for (const [type, spec] of Object.entries(furnitureCatalog)) for (const size of [spec.min, [spec.width, spec.height, spec.depth], spec.max]) {
+    const root = new THREE.Group(); parametricFurniture(root, ctx, spec.model, size);
+    const used = new Set(); root.traverse(n => { if (n.isMesh) used.add(n.material); });
+    assert.ok(furnitureMaterials[type].every(id => used.has(ctx[id])), `${type} advertised colors must exist on real geometry`);
+    const box = new THREE.Box3().setFromObject(root), [w, h, d] = size, tolerance = .001;
+    assert.ok(box.min.x >= -w / 2 - tolerance && box.max.x <= w / 2 + tolerance && box.min.y >= -tolerance && box.max.y <= h + tolerance && box.min.z >= -d / 2 - tolerance && box.max.z <= d / 2 + tolerance, `${type} ${size} meshes must stay inside declared dimensions: ${box.min.toArray()} – ${box.max.toArray()}`);
+    if ('top' in spec) assert.ok(Math.abs(box.max.y - h) < tolerance, `${type} tabletop follows requested height`);
+  }
+  ctx.dispose();
+  const { generatedRoomDesign } = await import(pathToFileURL(path.join(output, 'room/agent/generatedExample.js')));
+  const { nodeWorldBounds } = await import(pathToFileURL(path.join(output, 'room/spatial.js')));
+  const generatedPlan = roomFromDesign(generatedRoomDesign()).definition;
+  const generated = buildRoom(() => {}, generatedPlan), generatedResources = new Map();
+  generated.room.updateMatrixWorld(true);
+  for (const node of generatedPlan.nodes.filter(n => n.model === 'generated')) {
+    const root = generated.room.getObjectByName(node.id), expected = nodeWorldBounds(generatedPlan, node);
+    const meshes = root.children.filter(child => child.isMesh);
+    assert.equal(meshes.length, node.geometry.parts.length, 'Every generated part becomes an actual mesh');
+    const actual = new THREE.Box3(); meshes.forEach(mesh => actual.union(new THREE.Box3().setFromObject(mesh)));
+    assert.ok(actual.min.x >= expected.min[0] - .001 && actual.min.y >= expected.min[1] - .001 && actual.min.z >= expected.min[2] - .001 && actual.max.x <= expected.max[0] + .001 && actual.max.y <= expected.max[1] + .001 && actual.max.z <= expected.max[2] + .001, 'Rendered asset and validation bounds agree');
+  }
+  assert.equal(generated.room.getObjectByName('tv').parent.name, 'tv-cabinet');
+  assert.equal(generated.room.getObjectByName('upper-bed').parent.name, 'loft');
+  generated.room.traverse(n => {
+    if (!n.isMesh) return;
+    for (const r of [n.geometry, ...(Array.isArray(n.material) ? n.material : [n.material])].flatMap(r => r.map ? [r, r.map] : [r])) {
+      if (generatedResources.has(r)) continue;
+      generatedResources.set(r, 0); r.addEventListener('dispose', () => generatedResources.set(r, generatedResources.get(r) + 1));
+    }
+  });
+  generated.dispose(); generated.dispose();
+  assert.ok([...generatedResources.values()].every(count => count === 1), 'Generated meshes, materials and textures are released once');
+  console.log('PASS: generated geometry meshes match bounds, nested loft/TV transforms, material ownership and GPU cleanup');
+  console.log('PASS: parametric furniture at min/default/max sizes, independent color textures, metric windows, multiple instances and GPU cleanup');
   console.log('PASS: data-driven table/pet transforms, child support inheritance, interaction bindings, immutable input, lamp/audio behaviors, late photo cancellation and GPU cleanup');
   console.log('PASS: bedroom furniture geometry, desk-supported keepsakes, real window wall openings and GPU cleanup');
 })().catch(e => { console.error(e); process.exitCode = 1; });

@@ -1,6 +1,7 @@
 # Dependencies and build output
 node_modules/
 .next/
+.next-*/
 out/
 dist/
 coverage/
@@ -19,3 +20,7 @@ next-env.d.ts
 Thumbs.db
 .room-qa/
 .placement-test/
+.pet-agent/
+.pet-library/
+pet-recognition-generation/__pycache__/
+pet-recognition-generation/.venv/

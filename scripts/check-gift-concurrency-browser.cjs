@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { confirmPreview } = require('./room-editor-browser-helpers.cjs');
 const assert = require('node:assert/strict');
 const base = process.env.ROOM_URL || 'http://localhost:3000';
 const giftId = 'concurrency-test', key = `promised-land:gift:${giftId}`;
@@ -46,7 +47,7 @@ const editLetter = async (p, body) => {
     // A room save also merges content without replacing it with the workbench snapshot.
     await b.getByRole('textbox', { name: '房间描述', exact: true }).fill('卧室');
     await b.getByRole('button', { name: '生成房间', exact: true }).click();
-    await b.getByText('已生成并保存到本浏览器。', { exact: true }).waitFor(); await ready(b);
+    await confirmPreview(b); await ready(b);
     persisted = await b.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
     assert.equal(persisted.object_contents['sealed-letter'].body, 'first tab saved');
     assert.deepEqual(persisted.room, fixture.definition);
@@ -57,7 +58,9 @@ const editLetter = async (p, body) => {
       Storage.prototype.setItem = function(k, v) { if (k === key) throw new DOMException('quota', 'QuotaExceededError'); return set.call(this, k, v); };
     }, key);
     await b.getByRole('button', { name: '生成房间', exact: true }).click();
-    await b.getByRole('button', { name: '重试保存', exact: true }).waitFor();
+    await b.waitForFunction(() => document.querySelector('.room-editor-savebar button')?.disabled === false);
+    await b.getByRole('button', { name: '保存', exact: true }).click();
+    await b.getByText('保存失败，请重试。', { exact: true }).waitFor();
     assert.equal(await b.getByRole('link', { name: '完成', exact: true }).getAttribute('aria-disabled'), 'true');
     await b.getByRole('link', { name: '完成', exact: true }).click({ force: true });
     assert.ok(b.url().includes('/gift/edit?'));

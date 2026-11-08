@@ -1,9 +1,9 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 require('node:child_process').execFileSync(process.execPath, [path.resolve('node_modules/typescript/bin/tsc'),
-  'src/lib/media/photos.ts', '--ignoreConfig', '--outDir', '.room-qa/photo-state', '--module', 'commonjs',
+  'src/lib/media/photos.ts', '--ignoreConfig', '--rootDir', 'src', '--outDir', '.room-qa/photo-state', '--module', 'commonjs',
   '--target', 'es2022', '--skipLibCheck'], { stdio: 'inherit' });
-const { prepareGiftPhoto, prepareFramePhoto } = require('../.room-qa/photo-state/photos.js');
+const { prepareGiftPhoto, prepareFramePhoto, prepareRoomReference } = require('../.room-qa/photo-state/lib/media/photos.js');
 (async () => {
   let revoked = 0, decodeError = false, outputLength = 30;
   const canvases = [];
@@ -15,7 +15,7 @@ const { prepareGiftPhoto, prepareFramePhoto } = require('../.room-qa/photo-state
   global.document = { createElement() {
     const canvas = { width: 0, height: 0, filled: false, quality: 0,
       getContext() { return { fillRect() { canvas.filled = true; }, drawImage() {} }; },
-      toDataURL(type, quality) { this.quality = quality; return 'x'.repeat(outputLength); },
+      toDataURL(type, quality) { this.quality = quality; return 'data:image/jpeg;base64,' + 'x'.repeat(outputLength); },
       toBlob(callback, type, quality) { this.quality = quality; callback(new Blob(['jpeg'], { type })); },
     }; canvases.push(canvas); return canvas;
   } };
@@ -33,5 +33,18 @@ const { prepareGiftPhoto, prepareFramePhoto } = require('../.room-qa/photo-state
   await assert.rejects(() => prepareGiftPhoto(png), /无法处理/);
   await assert.rejects(() => prepareFramePhoto(png), /无法处理/);
   assert.equal(revoked, 5, 'Failed processing also releases object URLs');
+  decodeError = false; outputLength = 30;
+  const reference = await prepareRoomReference(png);
+  assert.ok(reference.startsWith('data:image/jpeg;base64,'));
+  const prepared = canvases.at(-1);
+  assert.deepEqual([prepared.width, prepared.height, prepared.filled, prepared.quality], [1280, 640, true, .8]);
+  await assert.rejects(() => prepareRoomReference(fake(12 * 1024 * 1024 + 1)), /12MB/);
+  await assert.rejects(() => prepareRoomReference(fake(1, 'image/svg+xml')), /JPG/);
+  outputLength = 1_600_001;
+  await assert.rejects(() => prepareRoomReference(png), /压缩后仍然过大/);
+  assert.equal(canvases.at(-1).quality, .5, 'Reference retries lower JPEG quality before rejecting');
+  decodeError = true;
+  await assert.rejects(() => prepareRoomReference(png), /参考照片无法处理/);
+  assert.equal(revoked, 8);
   console.log('PASS: independent upload limits, JPEG sizes/quality/backgrounds, decode/size errors, resource release');
 })().catch(e => { console.error(e); process.exitCode = 1; });

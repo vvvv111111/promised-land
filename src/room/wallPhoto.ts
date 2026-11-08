@@ -7,6 +7,8 @@ export function withWallPhoto(input: RoomDefinition, recompose = false): RoomDef
   const original = input.nodes.find(n => n.interaction === "sunset-frame");
   if (!original || (original.wall && !recompose)) return input;
   const plan = structuredClone(input), photo = plan.nodes.find(n => n.id === original.id)!;
+  // Use the whole silhouette here: a clear wall under an overhanging loft can
+  // still be hidden by its deck from the default elevated viewing direction.
   const obstacles = input.nodes.filter(n => n.id !== original.id && n.model !== "shell" && n.model !== "rug").map(n => nodeWorldBounds(input, n));
   const anchors = ["sofa", "bed", "cabinet", "desk"].map(model => input.nodes.find(n => n.model === model)).filter((n): n is RoomNode => Boolean(n));
   for (const scale of [1.1, 1, .85, .7]) for (const wall of ["back", "left"] as const) {

@@ -1,9 +1,12 @@
+import { MAX_ROOM_REFERENCE_LENGTH, ROOM_REFERENCE_MAX_EDGE } from "../../room/agent/reference";
+
 /** Shared image processing; each upload entry keeps its existing storage budget. */
 const imageTypes = ["image/jpeg", "image/png", "image/webp"];
 const photoError = "照片无法处理，请重新选择。";
 const policies = {
   gift: { maxEdge: 900, quality: .78, white: false, minSize: 0 },
   frame: { maxEdge: 1200, quality: .86, white: true, minSize: 1 },
+  reference: { maxEdge: ROOM_REFERENCE_MAX_EDGE, quality: .8, white: true, minSize: 1 },
 };
 
 function resize(image: CanvasImageSource, width: number, height: number, policy: typeof policies.gift, error: string) {
@@ -51,5 +54,25 @@ export async function prepareFramePhoto(file: File): Promise<string> {
   } catch (error) {
     if (error instanceof Error && error.name !== "EncodingError") throw error;
     throw new Error(photoError);
+  }
+}
+
+/** Re-encode locally so EXIF/GPS and full-resolution originals are not uploaded. */
+export async function prepareRoomReference(file: File): Promise<string> {
+  checkPhoto(file, 12);
+  try {
+    return await withImage(file, image => {
+      const { naturalWidth: width, naturalHeight: height } = image;
+      if (!width || !height || width * height > 32_000_000) throw new Error("照片尺寸过大或无法读取，请选择较小的房间照片。");
+      const canvas = resize(image, width, height, policies.reference, photoError);
+      for (const quality of [.8, .65, .5]) {
+        const data = canvas.toDataURL("image/jpeg", quality);
+        if (data.startsWith("data:image/jpeg;base64,") && data.length <= MAX_ROOM_REFERENCE_LENGTH) return data;
+      }
+      throw new Error("照片压缩后仍然过大，请选择较小的房间照片。");
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name !== "EncodingError") throw error;
+    throw new Error("参考照片无法处理，请重新选择。");
   }
 }
