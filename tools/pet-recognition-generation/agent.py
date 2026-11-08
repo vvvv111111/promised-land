@@ -13,12 +13,24 @@ import urllib.request
 from uuid import uuid4
 
 FALLBACKS = {"cat": ("cat", "kitten"), "dog": ("dog", "puppy")}
+REGIONAL_PRESETS = {
+    "bicolor_white": {
+        "catalog": ("Cat", "BicolorWhite"),
+        "appearance": ("cat", "white", "brown"),
+        "rule": "白底棕斑猫，保留白脸、白胸腹和白腿，适合肩背和后臀有独立棕斑的照片。",
+    },
+    "saddle_white": {
+        "catalog": ("Dog", "SaddleWhiteChestLegs"),
+        "appearance": ("dog", "brown", "black"),
+        "rule": "棕头棕耳、黑背鞍且有白胸白腿的犬，适合三色比格外观。预设另带白尾尖。",
+    },
+}
 PROMPT = """仅根据图片识别一只宠物。返回 JSON：species 为 cat、dog 或 unknown，
 observations 为可见外观描述列表，template_fit 包含 fits_primary（布尔）、reason、
 fallback_id，另含 generation_plan 和 mapping_losses（字符串数组）。
 按物种优先原卡通猫/狗。仅当头身、躯干或四肢比例明显无法近似时才允许 fits_primary=false，
 并写出具体比例差异。毛长、眼色、花纹、拍摄姿势和写实偏好本身都不允许更换体型。
-主模板可用时 fallback_id 必须为 null，generation_plan 为 pet/color/accent/pattern/scale/amount/seed。
+主模板可用时 fallback_id 必须为 null，generation_plan 必须是 JSON 对象，键为 pet、color、accent、pattern、scale、amount、seed。禁止返回斜杠分隔字符串。
 颜色仅 white/black/gray/cream/orange/brown。猫花纹 solid/stripes/patches/calico，
 狗花纹 solid/patches/spots。calico 固定 cat/white/black。scale 0.4–2.5，
 amount 0.15–0.85，seed 为 0–9999 的整数。分开判断毛色和配饰。
@@ -33,14 +45,44 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError("MiMo API 重定向已拒绝")
 
 
-def recognize(photo, mime, key):
+def regional_presets(library, studio):
+    manifest = library / "outputs" / "Pet_Visual_Library" / "library_manifest.json"
+    if not manifest.is_file() or not (studio / "web" / "regional-masks.mjs").is_file():
+        return {}
+    patterns = json.loads(manifest.read_text(encoding="utf-8-sig")).get("patterns", {})
+    enabled = {}
+    for name, preset in REGIONAL_PRESETS.items():
+        species, asset = preset["catalog"]
+        entry = patterns.get(species, {}).get(asset, {})
+        if (entry.get("status"), entry.get("runtime"), entry.get("runtime_pattern")) == (
+            "regional_mask", "PetStudio", name,
+        ):
+            enabled[name] = preset
+    return enabled
+
+
+def recognition_prompt(presets):
+    if not presets:
+        return PROMPT
+    rules = []
+    for name, preset in presets.items():
+        pet, color, accent = preset["appearance"]
+        rules.append(
+            f"{name}：{preset['rule']} 固定 pet={pet}、color={color}、accent={accent}。"
+        )
+    return PROMPT + "\n本机还支持以下分区预设，适配照片时优先于普通 patches。\n" + (
+        "\n".join(rules)
+    ) + "\n分区预设的 scale=1、amount=0.5、seed=0。特征明显不吻合或关键区域不可见时保留普通花纹。"
+
+
+def recognize(photo, mime, key, presets=None):
     body = {
         "model": os.environ.get("MIMO_MODEL", "mimo-v2.6-pro"),
         "messages": [{"role": "user", "content": [
             {"type": "image_url", "image_url": {
                 "url": "data:" + mime + ";base64," + base64.b64encode(photo).decode("ascii"),
             }},
-            {"type": "text", "text": PROMPT},
+            {"type": "text", "text": recognition_prompt(presets)},
         ]}],
         "thinking": {"type": "disabled"},
         "response_format": {"type": "json_object"},
@@ -69,6 +111,32 @@ def recognize(photo, mime, key):
     }
 
 
+def parse_appearance(plan):
+    """Decode compact MiMo output without supplying or changing values."""
+    if isinstance(plan, dict):
+        return plan
+    if not isinstance(plan, str):
+        raise ValueError("外观参数需要 JSON 对象")
+    fields = ("pet", "color", "accent", "pattern", "scale", "amount", "seed")
+    parts = plan.split("/")
+    if len(parts) == 8 and parts[0] == "pet":
+        values = [parts[1]]
+        for field, part in zip(fields[1:], parts[2:]):
+            label, separator, value = part.partition(":")
+            if not separator or label != field:
+                raise ValueError("外观参数标签无效")
+            values.append(value)
+    elif len(parts) == 7 and all(":" not in part for part in parts):
+        values = parts
+    else:
+        raise ValueError("外观参数格式无效")
+    result = dict(zip(fields, values))
+    for key in ("scale", "amount"):
+        result[key] = float(result[key])
+    result["seed"] = int(result["seed"])
+    return result
+
+
 def write_json(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -84,6 +152,7 @@ def generate(args):
     if mime is None or not 0 < args.photo.stat().st_size <= 20_000_000:
         raise ValueError("照片需为 JPEG 或 PNG，最大 20 MB")
     photo = args.photo.read_bytes()
+    presets = regional_presets(library, studio)
     mode = "live_mimo"
     if args.receipt:
         receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
@@ -92,7 +161,7 @@ def generate(args):
         key = (os.environ.get("MIMO_API_KEY") or getpass("MiMo API key: ")).strip()
         if not key:
             raise ValueError("未提供 MiMo 密钥")
-        receipt = recognize(photo, mime, key)
+        receipt = recognize(photo, mime, key, presets)
     if (receipt.get("input_type") != "image_url/base64" or not receipt.get("response_id")
             or receipt.get("image_sha256") != sha256(photo).hexdigest()):
         raise ValueError("识图回执与照片不匹配")
@@ -117,9 +186,17 @@ def generate(args):
         sys.path.insert(0, str(studio))
         from server import validate
         from render import render_template
-        params = validate(recognition["generation_plan"])
+        params = validate(parse_appearance(recognition["generation_plan"]))
         if params["pet"] != species:
             raise ValueError("毛色参数与识别物种不一致")
+        pattern = params["pattern"]
+        if pattern in REGIONAL_PRESETS:
+            if pattern not in presets:
+                raise ValueError("本地素材库未启用该分区预设")
+            expected = presets[pattern]["appearance"]
+            if (params["pet"], params["color"], params["accent"]) != expected:
+                raise ValueError("分区预设的物种或配色不匹配")
+            summary["regional_preset"] = presets[pattern]["catalog"][1]
         summary.update(render_template(studio, run, params, args.chrome))
         summary.update(status="generated", template="original_" + species, appearance_changed=True)
     elif fallback is not None:
