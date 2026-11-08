@@ -7,9 +7,10 @@ import { randomUUID } from "node:crypto";
 import { mimoConfig } from "./roomAgent";
 import { validateRoomReference } from "./roomReference";
 import { decodePetGlb, MAX_PET_GLB_BYTES } from "../../room/petAsset";
+import { petGenerationMetadata, type PetGenerationMetadata } from "../../room/petAppearance";
 
 const exec = promisify(execFile);
-export interface PetJobResult { species: "cat" | "dog"; glb: string; template: string; source?: string; license?: string; appearanceChanged: boolean }
+export interface PetJobResult extends PetGenerationMetadata { species: "cat" | "dog"; glb: string; template: string; source?: string; license?: string; appearanceChanged: boolean }
 export interface PetJob { id: string; status: "running" | "succeeded" | "failed" | "cancelled"; createdAt: number; result?: PetJobResult; error?: string }
 type RunningJob = PetJob & { process?: ChildProcess; settled?: Promise<void> };
 // Survives development module reloads. Jobs intentionally belong to this local Node server.
@@ -31,9 +32,12 @@ export async function petAgentStatus() {
   catch { return { ...base, configured: false, message: "宠物生成需要 Python 3.10+ 和 requirements.txt 中的依赖。" }; }
   try { await access(process.env.PET_AGENT_CHROME || "C:/Program Files/Google/Chrome/Application/chrome.exe"); }
   catch { return { ...base, configured: false, message: "未找到生成预览需要的 Chrome，请设置 PET_AGENT_CHROME。" }; }
-  let primaryAvailable = true;
-  try { await Promise.all(["server.py", "storage.py"].map(p => access(path.join(library(), "outputs/PetStudio", p)))); } catch { primaryAvailable = false; }
-  return { ...base, configured: true, primaryAvailable, message: primaryAvailable ? "" : "当前按照片匹配四款模型，保留模型原有毛色和静态姿态。" };
+  try {
+    const { stdout } = await exec(python(), ["-B", "-X", "utf8", path.resolve("pet-recognition-generation/agent.py"), "--capabilities", "--library", library()], { timeout: 10_000, windowsHide: true });
+    const capabilities = JSON.parse(stdout);
+    if (typeof capabilities.primaryAvailable !== "boolean" || !Array.isArray(capabilities.regionalPresets) || capabilities.regionalPresets.some((p: unknown) => p !== "bicolor_white" && p !== "saddle_white") || (!capabilities.primaryAvailable && capabilities.regionalPresets.length)) throw Error("Invalid capabilities");
+    return { ...base, configured: true, primaryAvailable: capabilities.primaryAvailable, regionalPresets: capabilities.regionalPresets as string[], message: capabilities.primaryAvailable ? "" : "当前按照片匹配四款模型，保留模型原有毛色和静态姿态。" };
+  } catch { return { ...base, configured: false, message: "宠物素材能力检查失败，请检查本地配置。" }; }
 }
 
 export async function selectLibraryPet(id: unknown): Promise<PetJobResult> {
@@ -113,7 +117,9 @@ async function runPetJob(job: RunningJob, image: string) {
     // Both template/fallback exporters supply a digest; verify before delivering.
     const { createHash } = await import("node:crypto");
     if (createHash("sha256").update(data).digest("hex") !== summary.sha256) throw new PetAgentError("宠物模型完整性校验失败。");
-    job.result = { species: summary.species, glb, template: String(summary.template), appearanceChanged: summary.appearance_changed === true, ...(typeof summary.source === "string" ? { source: summary.source } : {}), ...(typeof summary.license === "string" ? { license: summary.license } : {}) };
+    const metadata = petGenerationMetadata({ appearanceChanged: summary.appearance_changed, appearance: summary.params, regionalPreset: summary.regional_preset, mappingLosses: summary.mapping_losses }, summary.species);
+    if (metadata.appearanceChanged !== (summary.status === "generated")) throw new PetAgentError("宠物生成记录与模型不一致。");
+    job.result = { ...metadata, species: summary.species, glb, template: String(summary.template), appearanceChanged: metadata.appearanceChanged, ...(typeof summary.source === "string" ? { source: summary.source } : {}), ...(typeof summary.license === "string" ? { license: summary.license } : {}) };
     job.status = "succeeded";
   } catch (error) {
     if (job.status === "running") { job.status = "failed"; job.error = error instanceof PetAgentError ? error.message : "宠物生成未能完成，请检查配置后重试。"; }

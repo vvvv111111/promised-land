@@ -83,7 +83,34 @@ const pet = value => value.definition.nodes.find(n => n.petAsset);
     await page.evaluate(()=>{Storage.prototype.setItem=window.petOriginalSetItem});
     await confirmPreview(page);
     assert.equal(pet(await saved(page)).petAsset.template,'cat');
+    // Mock only the recognition response: this checks metadata transport, not coat rendering.
+    const appearance = {pet:'cat',color:'white',accent:'brown',pattern:'bicolor_white',scale:1,amount:.5,seed:0};
+    const metadata = {appearanceChanged:true,appearance,regionalPreset:'BicolorWhite',mappingLosses:['Fixture approximation']};
+    let photoRequests=0;
+    await context.route('**/api/pet-agent',async route=>{
+      const request=route.request();
+      if(request.method()==='GET') return route.fulfill({json:{configured:true,libraryAvailable:true,primaryAvailable:true,regionalPresets:['bicolor_white']}});
+      if(request.method()==='POST' && request.postDataJSON().image) {
+        photoRequests++;
+        return route.fulfill({json:{status:'succeeded',result:{species:'cat',template:'original_cat',glb:fs.readFileSync('.pet-library/outputs/Pet_Model_Selection_Room/cat.glb').toString('base64'),...metadata}}});
+      }
+      return route.continue();
+    });
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector('.room3d-actions button')?.disabled===false);
+    await page.getByRole('tab',{name:'宠物',exact:true}).click();
+    await page.getByRole('button',{name:'用照片',exact:true}).click();
+    await page.locator('#pet-agent-photo').setInputFiles('public/assets/warm-room-v1/cat_orange_01.png');
+    await page.getByRole('button',{name:'识别匹配',exact:true}).click();
+    await confirmPreview(page);
+    assert.equal(photoRequests,1);
+    for(const [key,value] of Object.entries(metadata)) assert.deepEqual(pet(await saved(page)).petAsset[key],value);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector('.room3d-actions button')?.disabled===false);
+    for(const [key,value] of Object.entries(metadata)) assert.deepEqual(pet(await saved(page)).petAsset[key],value);
+    assert.equal(pet(await saved(page)).petAsset.glb,'');
     await page.getByRole('tab',{name:'宠物',exact:true}).scrollIntoViewIfNeeded();
+    await page.getByRole('tab',{name:'宠物',exact:true}).click();
     await page.screenshot({path:'.room-qa/pet-desktop.png'});
     await page.setViewportSize({width:390,height:844});
     await page.getByRole('tab',{name:'宠物',exact:true}).scrollIntoViewIfNeeded();
@@ -98,6 +125,6 @@ const pet = value => value.definition.nodes.find(n => n.petAsset);
     await page.reload(); await page.waitForFunction(()=>document.querySelector('.room3d-actions button')?.disabled===false);
     assert.equal(pet(await saved(page)),undefined);
     assert.deepEqual(errors,[]);
-    console.log('PASS: four real GLBs, IndexedDB persistence, resize/yaw, room regeneration, saved recipient rendering, quota rollback/retry, desktop/mobile and pet removal');
+    console.log('PASS: four real GLBs, IndexedDB persistence, resize/yaw, room regeneration, saved recipient rendering, quota rollback/retry, mock regional metadata save/reload, desktop/mobile and pet removal');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1});

@@ -1,8 +1,9 @@
 import type { Vec3 } from "./types";
+import { petGenerationMetadata, type PetGenerationMetadata } from "./petAppearance";
 
 // Exports embed GLBs; browser snapshots may reference a content-addressed IndexedDB model.
 export const MAX_PET_GLB_BYTES = 2_500_000;
-export interface PetAsset {
+export interface PetAsset extends PetGenerationMetadata {
   version: 1;
   species: "cat" | "dog";
   glb: string;
@@ -43,6 +44,7 @@ export function validatePetAsset(input: unknown): asserts input is PetAsset {
   if (!Array.isArray(a.size) || a.size.length !== 3 || a.size.some(n => !Number.isFinite(n) || n < .01 || n > 2.5) || Math.abs(Math.max(a.size[0], a.size[2]) - a.targetLength) > .001) throw new Error("宠物实测尺寸与目标尺寸不一致。");
   for (const value of [a.template, a.source, a.license]) if (value !== undefined && (typeof value !== "string" || value.length > 1000)) throw new Error("宠物来源信息无效。");
   if (typeof a.template !== "string" || !a.template.trim()) throw new Error("宠物模板信息缺失。");
+  petGenerationMetadata(a, a.species);
   if (typeof a.glb !== "string") throw new Error("宠物模型数据无效。");
   if (a.glb) decodePetGlb(a.glb);
   else if (typeof a.assetId !== "string" || !/^[a-f0-9]{64}$/.test(a.assetId)) throw new Error("宠物模型引用无效。");

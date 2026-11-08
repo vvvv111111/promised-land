@@ -6,6 +6,10 @@
 
 当前压缩包只有四款静态备选模型，没有 `PetStudio` 主模板。照片识别只匹配同物种的现有体型，保留模型原有毛色与姿态，不代表生成了照片中宠物的专属外观。补齐 PetStudio 后，Python 生成器可按原规则优先使用毛色模板。
 
+已补入 `f45e4aa` 的两种分区毛色：白底棕斑猫 `bicolor_white`、黑背鞍白胸腿犬 `saddle_white`。需要主模板 `server.py`、`storage.py`、遮罩脚本 `web/regional-masks.mjs`，以及 `outputs/Pet_Visual_Library/library_manifest.json` 中匹配的 `regional_mask / PetStudio / runtime_pattern` 登记；缺失或清单无效时不向识图模型开放。当前素材尚不具备这些依赖，因此仍使用四款备选。
+
+生成前后校验固定物种、主辅色及 `scale=1 / amount=0.5 / seed=0`，拒绝运行时静默改变参数。`appearance`、`regionalPreset`、`appearanceChanged`、`mappingLosses` 随模型经过预览、本机保存和底层嵌入导出工具；旧方案仍兼容。毛色的 `scale` 仅控制花纹，不改变实测尺寸、落地与避碰规则。实际分区着色需补齐素材后再做渲染验证。
+
 ## 本地素材与运行
 
 已将 `猫狗模型选样_4款.zip` 解压到 `.pet-library/outputs/Pet_Model_Selection`。原件不改动、不提交 Git，按模型来源清单保留许可文件。`npm run prepare:pets` 校验原件 SHA-256，生成 `Pet_Model_Selection_Room`：静态网格简化、UV/法线参与误差约束、16 位索引、最长 1024 像素的贴图。保留来源、原件摘要、派生摘要和实际面数。
@@ -29,7 +33,7 @@ PET_MIMO_MODEL=可选，默认继承 MIMO_MODEL
 
 界面用“占地长边（含尾巴）”明确尺寸含义，允许 0.25–1.4 米，并提供四向旋转；高度与另一条边按比例变化。模型使用房间的灯光、环境、曝光和阴影。静态备选保持原贴图与 PBR 材质，其写实风格不会自动变为家具的卡通风格。没有宠物动画或互动。
 
-`composePet.ts` 使用实测宽高深、旋转后的包围盒和现有空间校验，检查墙界、地面、家具与自定义几何。预留约 8cm 间距；地毯内完整放置时按毯面落脚，拒绝横跨毯边。重新生成或恢复默认房间时，保留宠物资产、明确设置的尺寸和朝向，先尝试旧位置，再寻找新位置。没有可用位置就保留当前房间并提示调整，不删掉宠物或暗中缩小它。
+`composePet.ts` 使用实测宽高深、旋转后的包围盒和现有空间校验，检查墙界、地面、家具与自定义几何。预留约 8cm 间距；地毯内完整放置时按毯面落脚，拒绝横跨毯边。重新生成房间时，保留宠物资产、明确设置的尺寸和朝向，先尝试旧位置，再寻找新位置。没有可用位置就保留当前房间并提示调整，不删掉宠物或暗中缩小它。
 
 碰撞采用保守包围盒，自定义家具使用部件碰撞；不等于精确网格碰撞，也没有全房间通路规划。加载时再次测量模型，拒绝与保存尺寸不一致的资产。异步加载失败有明确提示，加载取消或替换时释放几何、材质、贴图和骨骼资源。
 
@@ -48,8 +52,8 @@ PET_MIMO_MODEL=可选，默认继承 MIMO_MODEL
 ## 验证
 
 - `npm run typecheck`、`npm test`、独立构建目录的 `npm run build`。
-- `npm run test:pets`：尺寸、坐标轴、落地、避碰、无空间回退、房间重生成、数据持久化、非法输入与异步释放。
-- `node scripts/check-pet-agent-browser.cjs`：使用已有 Playwright 与本机 Chrome，设置 `ROOM_URL`；四款真实 GLB、IndexedDB、尺寸和朝向、房间重生成、独立浏览器的完整导出渲染、保存失败重试、收礼只读、手机与桌面截图。房间生成使用模拟响应，不产生 MiMo 调用费用。
+- `npm run test:pets`：Python 离线能力/参数/模拟导出测试，以及尺寸、坐标轴、落地、避碰、无空间回退、房间重生成、元数据持久化、非法输入与异步释放。
+- `node scripts/check-pet-agent-browser.cjs`：使用已有 Playwright 与本机 Chrome，设置 `ROOM_URL`；四款真实 GLB、IndexedDB、尺寸和朝向、房间重生成、本机已保存方案的收礼渲染、保存失败重试、收礼只读、手机与桌面截图。房间生成使用模拟响应，不产生 MiMo 调用费用。
 - 实际 Python 离线回执检查与真实 MiMo 识别已使用本地公开猫模型预览图验证；真实调用结果与重放明确区分，不上传私人照片。
 
 并行检查已有 `.next` 服务时，可设置 `NEXT_DIST_DIR=.next-pet-qa`，使用独立构建目录和端口。

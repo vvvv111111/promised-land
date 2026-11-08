@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { prepareRoomReference } from "@/lib/media/photos";
 import { composePet, customPet } from "@/room/composePet";
 import type { PetAsset } from "@/room/petAsset";
+import { petGenerationMetadata } from "@/room/petAppearance";
 import type { RoomDefinition } from "@/room/types";
 
 interface Props {
@@ -89,7 +90,7 @@ export default function PetAgentPanel({ definition, disabled, onBusyChange, onCh
       }
       if (job.status !== "succeeded" || !job.result) throw new Error(job.error || "宠物生成未完成。");
       const r = job.result;
-      await apply({ species: r.species, glb: r.glb, template: r.template, source: r.source, license: r.license, targetLength: length, upAxis: "y" }, signal);
+      await apply({ ...petGenerationMetadata(r, r.species), species: r.species, glb: r.glb, template: r.template, source: r.source, license: r.license, targetLength: length, upAxis: "y" }, signal);
     });
   }
 

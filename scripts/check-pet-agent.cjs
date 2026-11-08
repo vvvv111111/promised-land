@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const python = process.env.PET_AGENT_PYTHON || (fs.existsSync('pet-recognition-generation/.venv/Scripts/python.exe') ? path.resolve('pet-recognition-generation/.venv/Scripts/python.exe') : 'python');
+require('node:child_process').execFileSync(python,['-B','-X','utf8','-m','unittest','discover','-s','pet-recognition-generation','-p','test_agent.py'],{stdio:'inherit'});
 const output = path.resolve('.room-qa/pet-state'); fs.mkdirSync(output,{recursive:true});
 fs.writeFileSync(path.join(output,'package.json'),JSON.stringify({type:'module'}));
 fs.writeFileSync(path.join(output,'tsconfig.json'),JSON.stringify({extends:'../../tsconfig.json',compilerOptions:{noEmit:false,incremental:false,outDir:'.',rootDir:'../../src',types:['node'],typeRoots:[path.resolve('node_modules/@types')]},include:['../../src/room/composePet.ts','../../src/room/models/petGlb.ts','../../src/room/agent/examples.ts','../../src/room/agent/persistence.ts','../../src/app/api/pet-agent/route.ts']}));
@@ -48,6 +50,20 @@ async function main() {
   const asset = await measurePetAsset({ species: 'cat', glb, template: 'fixture', targetLength: .6, upAxis: 'y' });
   assert.ok(asset.size.every((n,i) => Math.abs(n - [.6,.3,.24][i]) < 1e-9));
   validatePetAsset(asset);
+  // Coat controls are separate from measured room dimensions, and survive regeneration/export.
+  for (const [species,pattern,color,accent,regionalPreset] of [['cat','bicolor_white','white','brown','BicolorWhite'],['dog','saddle_white','brown','black','SaddleWhiteChestLegs']]) {
+    const appearance = {pet:species,color,accent,pattern,scale:1,amount:.5,seed:0};
+    const regionalAsset = {...asset,species,appearanceChanged:true,appearance,regionalPreset,mappingLosses:['Fixture approximation']};
+    validatePetAsset(regionalAsset);
+    const combined = composePet(defaultRoom,regionalAsset);
+    const regenerated = preservePet(roomFromDesign(flexibleBedroomDesign()).definition,combined);
+    const portable = JSON.parse(JSON.stringify(regenerated)); validateRoomDefinition(portable);
+    assert.deepEqual(customPet(portable).petAsset,regionalAsset);
+    assert.deepEqual(customPet(selectedRoom({getItem:()=>JSON.stringify({definition:portable})})).petAsset,regionalAsset);
+    for (const change of [a=>a.appearance.color='orange',a=>a.appearance.pet=species==='cat'?'dog':'cat',a=>a.appearance.scale=.9,a=>a.appearance.amount=.6,a=>a.appearance.seed=1,a=>a.regionalPreset='unknown',a=>delete a.regionalPreset,a=>delete a.appearance,a=>a.appearanceChanged=false,a=>a.mappingLosses=['x'.repeat(501)]]) {
+      const bad=structuredClone(regionalAsset);change(bad);assert.throws(()=>validatePetAsset(bad));
+    }
+  }
   const model = await loadNormalizedPet(glb,.6,'y');
   const THREE = await import('three');
   const bounds = new THREE.Box3().setFromObject(model.root,true);

@@ -76,7 +76,7 @@ npm run build
 
 `npm test` 包含 MiMo 协议 mock 测试：结构/边界/重叠校验、修正重试、默认房间不变、输入限制、同源检查、并发控制和错误不泄露密钥。
 
-扩展测试：`scripts/check-room-flexible.cjs` 验证重复实例、单人床、配色、大小房间、米制窗户、纪念物排布、旋转碰撞及新旧持久化；模型测试检查所有家具最小/默认/最大尺寸的实际网格包围盒与 GPU 释放。`scripts/check-room-flexible-browser.cjs` 验证新增示例、保存/刷新/导出、物品特写和桌面/手机布局。
+扩展测试：`scripts/check-room-flexible.cjs` 验证重复实例、单人床、配色、大小房间、米制窗户、纪念物排布、旋转碰撞及新旧持久化；模型测试检查所有家具最小/默认/最大尺寸的实际网格包围盒与 GPU 释放。`scripts/check-room-flexible-browser.cjs` 验证新增示例、保存/刷新、物品特写和桌面/手机布局。
 
 真实调用（消耗额度，不在 `npm test` 内）：设置 `ROOM_URL` 后，运行 `node scripts/check-room-flexible-live.cjs` 或添加 `--dining`。结果保存在忽略目录 `.room-qa/flexible-{study,dining}-live.json`。
 
@@ -84,7 +84,7 @@ npm run build
 
 扩展前回退点：本地提交 `6850d7d`，标签 `checkpoint/room-agent-before-expansion-20261107`，包含开始修改前已存在的项目代码；不含被 Git 忽略的 `.env.local`、依赖、构建产物和浏览器本地数据。
 
-浏览器脚本使用既有 Playwright，设置 `NODE_PATH`、`ROOM_URL`、`ROOM_CHROMIUM` 后运行 `node scripts/check-room-agent-browser.cjs`。覆盖生成、失败保留、非法响应、取消、刷新恢复、导出、信件/CD、手机宽度、收礼者无编辑入口及保存失败。截图写入 Git 忽略的 `.room-qa/`。
+浏览器脚本使用既有 Playwright，设置 `NODE_PATH`、`ROOM_URL`、`ROOM_CHROMIUM` 后运行 `node scripts/check-room-agent-browser.cjs`。覆盖生成、失败保留、非法响应、取消、刷新恢复、精简操作、信件/CD、手机宽度、收礼者无编辑入口及保存失败。截图写入 Git 忽略的 `.room-qa/`。
 
 真实 API 检查会消耗 MiMo 额度，不包含在 `npm test` 中。先运行 `npm test` 生成临时编译文件，启动已配置密钥的服务，然后运行：
 
