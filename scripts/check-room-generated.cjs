@@ -15,6 +15,12 @@ assert.deepEqual(source, before);
 validateRoomDefinition(result.definition);
 assert.equal(result.definition.nodes.filter(n => n.model === 'generated').length, 4);
 assert.deepEqual(roomFromDesign(JSON.parse(JSON.stringify(result.design))), result, 'Geometry recipes persist without a provider call');
+const roundoff = { label: 'tiny origin rounding', parts: [
+  { shape: 'ellipsoid', size: [.1, .1, .1], position: [0, .05000000000000002, 0], color: '#ffffff' },
+  { shape: 'ellipsoid', size: [.1, .1, .1], position: [0, .14500000000000002, 0], color: '#ffffff' },
+] };
+const stableGeometry = parseGeneratedAsset(roundoff);
+for (let i = 0; i < 20; i++) assert.deepEqual(parseGeneratedAsset(JSON.parse(JSON.stringify(stableGeometry))), stableGeometry, 'Canonical geometry stays stable across repeated parsing');
 assert.deepEqual(selectedRoom({ getItem: () => JSON.stringify(result) }), result.definition);
 const node = id => result.definition.nodes.find(n => n.id === id);
 assert.equal(node('upper-bed').parent, 'loft');

@@ -77,6 +77,20 @@ export class GiftStore {
     });
   }
 
+  saveDetailsLocked(patch: Partial<Pick<GiftDetails, "recipient" | "sender" | "memory">>): Promise<GiftConfig> {
+    return this.locked(() => {
+      const entries = Object.entries(patch);
+      if (entries.some(([key, value]) => !["recipient", "sender", "memory"].includes(key) || typeof value !== "string" || value.length > (key === "memory" ? 2000 : 20))) throw new Error("礼物信息无效，请检查后重试。");
+      const latest = this.latest(), next = latest.read();
+      for (const [key, value] of entries as ["recipient" | "sender" | "memory", string][]) {
+        if ((next.details?.[key] ?? "") !== (this.config.details?.[key] ?? "") && next.details?.[key] !== value) this.conflict();
+      }
+      const details = { recipient: "", sender: "", memory: "", extra_photos: [], ...next.details, ...patch };
+      const committed = latest.saveGift({ ...next, details });
+      this.adopt(latest); return committed;
+    });
+  }
+
   private equal(a: unknown, b: unknown) { return JSON.stringify(a) === JSON.stringify(b); }
   private conflict(): never { throw new Error("礼物已在其他页面更新。请先保留当前输入，再刷新页面后编辑。"); }
   private latest() {

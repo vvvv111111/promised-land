@@ -52,6 +52,7 @@ export function compileModernDesign(design: RoomDesign) {
     const base = supportFootprint(node), [sx, , sz] = surface.position;
     const minDx = sx - surface.size[0] / 2 + .005 - base.min[0], maxDx = sx + surface.size[0] / 2 - .005 - base.max[0];
     const minDz = sz - surface.size[1] / 2 + .005 - base.min[2], maxDz = sz + surface.size[1] / 2 - .005 - base.max[2];
+    if (minDx > maxDx || minDz > maxDz || Math.hypot(Math.max(minDx, Math.min(maxDx, 0)), Math.max(minDz, Math.min(maxDz, 0))) > .25) throw new Error(`${node.id} overhangs its support; preserve the object and correct its parent/surface or local placement`);
     if (minDx <= maxDx && minDz <= maxDz) {
       const dx = Math.max(minDx, Math.min(maxDx, 0)), dz = Math.max(minDz, Math.min(maxDz, 0));
       if (Math.hypot(dx, dz) <= .25) {
@@ -61,6 +62,10 @@ export function compileModernDesign(design: RoomDesign) {
     }
   }
   placeGiftObjects(definition);
+  for (const item of design.furniture) if (item.parent) {
+    const node = nodes.get(item.id)!;
+    item.x = node.position[0]; item.z = node.position[2];
+  }
   definition = withWallPhoto(definition, true);
   definition.lighting.sun.color = design.lighting.sunColor;
   definition.lighting.sun.intensity = design.lighting.intensity;
@@ -76,49 +81,77 @@ export function compileModernDesign(design: RoomDesign) {
 
 /** Pack real object footprints onto real tabletop dimensions; no inherited coordinates. */
 function placeGiftObjects(definition: RoomDefinition) {
-  type Rect = { x: number; z: number; width: number; depth: number };
+  type Rect = { x: number; z: number; width: number; depth: number; bottom: number; top: number };
   const nodes = new Map(definition.nodes.map(n => [n.id, n]));
   const height = (node: RoomNode) => { let y = node.position[1], parent = node.parent; while (parent) { const n = nodes.get(parent)!; y += n.position[1]; parent = n.parent; } return y; };
   const supports = definition.nodes.flatMap(node => (node.surfaces ?? []).map(surface => ({ node, surface, key: `${node.id}/${surface.id}` }))).sort((a, b) => {
     const reach = (s: typeof a) => { const h = height(s.node) + s.surface.position[1]; return h >= .3 && h <= 1.3 ? 0 : 1; };
     return reach(a) - reach(b) || b.surface.size[0] * b.surface.size[1] - a.surface.size[0] * a.surface.size[1];
   });
+  type Item = { node: RoomNode; bounds: ReturnType<typeof modelBounds>; contact?: ReturnType<typeof modelBounds>; support?: typeof supports[number]; original?: { x: number; z: number } };
+  // Small authored props stay on their original surface, at their original scale and rotation.
+  // Pack them together with the keepsakes so independent clamping cannot stack every prop in one corner.
+  const props: Item[] = definition.nodes.flatMap(node => {
+    if (!["generated", "plant"].includes(node.model) || !node.parent || node.surfaces?.length) return [];
+    const support = supports.find(s => s.node.id === node.parent && s.surface.id === node.surface);
+    if (!support) return [];
+    const b = pointBounds(nodeLocalBoxes(node).flat()), base = supportFootprint(node);
+    if (b.max[0] - b.min[0] > 1 || b.max[2] - b.min[2] > 1 || b.max[1] - b.min[1] > 1.5) return [];
+    return [{ node, bounds: { min: [b.min[0] - node.position[0], b.min[1] - node.position[1], b.min[2] - node.position[2]], max: [b.max[0] - node.position[0], b.max[1] - node.position[1], b.max[2] - node.position[2]] } as ReturnType<typeof modelBounds>, contact: { min: base.min.map((v, i) => v - node.position[i]), max: base.max.map((v, i) => v - node.position[i]) } as ReturnType<typeof modelBounds>, support, original: { x: node.position[0], z: node.position[2] } }];
+  }).sort((a, b) => (b.bounds.max[0] - b.bounds.min[0]) * (b.bounds.max[2] - b.bounds.min[2]) - (a.bounds.max[0] - a.bounds.min[0]) * (a.bounds.max[2] - a.bounds.min[2])).slice(0, 8);
+  const movable = new Set(props.map(item => item.node.id));
   const occupied = new Map(supports.map(s => {
-    const used: Rect[] = definition.nodes.filter(n => !["cd", "lamp", "envelope", "frame"].includes(n.id) && n.parent === s.node.id && n.surface === s.surface.id).map(n => {
+    const used: Rect[] = definition.nodes.filter(n => !["cd", "lamp", "envelope", "frame"].includes(n.id) && !movable.has(n.id) && n.parent === s.node.id && n.surface === s.surface.id).map(n => {
       const b = pointBounds(nodeLocalBoxes(n).flat());
-      return { x: (b.min[0] + b.max[0]) / 2 - s.surface.position[0], z: (b.min[2] + b.max[2]) / 2 - s.surface.position[2], width: b.max[0] - b.min[0], depth: b.max[2] - b.min[2] };
+      return { x: (b.min[0] + b.max[0]) / 2 - s.surface.position[0], z: (b.min[2] + b.max[2]) / 2 - s.surface.position[2], width: b.max[0] - b.min[0], depth: b.max[2] - b.min[2], bottom: b.min[1] - s.surface.position[1], top: b.max[1] - s.surface.position[1] };
     });
     // A platform railing or raised part is occupied even though it belongs to the support itself.
     if (s.node.geometry) for (const points of generatedBoxes(s.node.geometry)) {
       const b = pointBounds(points);
-      if (b.max[1] <= s.surface.position[1] + .01 || b.min[1] > s.surface.position[1] + .7) continue;
-      used.push({ x: (b.min[0] + b.max[0]) / 2 - s.surface.position[0], z: (b.min[2] + b.max[2]) / 2 - s.surface.position[2], width: b.max[0] - b.min[0], depth: b.max[2] - b.min[2] });
+      if (b.max[1] <= s.surface.position[1] + .01) continue;
+      used.push({ x: (b.min[0] + b.max[0]) / 2 - s.surface.position[0], z: (b.min[2] + b.max[2]) / 2 - s.surface.position[2], width: b.max[0] - b.min[0], depth: b.max[2] - b.min[2], bottom: b.min[1] - s.surface.position[1], top: b.max[1] - s.surface.position[1] });
     }
     return [s.key, used] as const;
   }));
-  const items = ["cd", "lamp", "envelope"].map(id => { const node = definition.nodes.find(n => n.id === id)!; return { node, bounds: modelBounds(node) }; });
-  let budget = 1000, missing = "cd";
-  // Backtrack the three keepsakes together. Greedy placement can consume all space
-  // with the first object even when a smaller, rotated arrangement fits them all.
+  const items: Item[] = [...props, ...["cd", "lamp", "envelope"].map(id => { const node = definition.nodes.find(n => n.id === id)!; return { node, bounds: modelBounds(node) }; })];
+  let budget = 20_000, missing = "cd";
   function place(index: number): boolean {
     if (index === items.length) return true;
-    if (--budget < 0) return false;
-    const { node, bounds } = items[index]; missing = node.id;
-    for (const scale of [1, .85, .7, .55]) for (const support of supports) {
+    const item = items[index], { node, bounds } = item; missing = node.id;
+    for (const scale of item.support ? [1] : [1, .85, .7, .55]) for (const support of item.support ? [item.support] : supports) {
       const { surface } = support, [sw, sd] = surface.size;
-      for (const yaw of [0, Math.PI / 2]) {
+      for (const yaw of item.support ? [0] : [0, Math.PI / 2]) {
         const w = bounds.max[0] - bounds.min[0], d = bounds.max[2] - bounds.min[2];
         const width = (yaw ? d : w) * scale, depth = (yaw ? w : d) * scale;
         const halfW = width / 2, halfD = depth / 2, margin = .012, gap = .025, used = occupied.get(support.key)!;
-        const xs = [-sw / 2 + halfW + margin, sw / 2 - halfW - margin, 0, ...used.flatMap(r => [r.x - r.width / 2 - halfW - gap, r.x + r.width / 2 + halfW + gap])];
-        const zs = [-sd / 2 + halfD + margin, sd / 2 - halfD - margin, 0, ...used.flatMap(r => [r.z - r.depth / 2 - halfD - gap, r.z + r.depth / 2 + halfD + gap])];
+        const top = (bounds.max[1] - bounds.min[1]) * scale + .005;
+        const blockers = used.filter(r => r.top > .005 && r.bottom < top + .015);
+        const cx = (bounds.min[0] + bounds.max[0]) / 2, cz = (bounds.min[2] + bounds.max[2]) / 2;
+        // A vase's flowers may extend beyond the shelf; its real base must stay supported.
+        // Keep the full upper footprint for collision checks against other objects and rails.
+        const minX = item.contact ? -sw / 2 + margin + cx - item.contact.min[0] : -sw / 2 + halfW + margin;
+        const maxX = item.contact ? sw / 2 - margin + cx - item.contact.max[0] : sw / 2 - halfW - margin;
+        const minZ = item.contact ? -sd / 2 + margin + cz - item.contact.min[2] : -sd / 2 + halfD + margin;
+        const maxZ = item.contact ? sd / 2 - margin + cz - item.contact.max[2] : sd / 2 - halfD - margin;
+        if (minX > maxX || minZ > maxZ) continue;
+        const px = item.original ? item.original.x + cx - surface.position[0] : 0, pz = item.original ? item.original.z + cz - surface.position[2] : 0;
+        const unique = (values: number[]) => [...new Map(values.map(v => [Math.round(v * 1e7), v])).values()];
+        const xs = unique([...(item.original ? [px] : []), minX, maxX, 0, ...blockers.flatMap(r => [r.x - r.width / 2 - halfW - gap, r.x + r.width / 2 + halfW + gap])]);
+        const zs = unique([...(item.original ? [pz] : []), minZ, maxZ, 0, ...blockers.flatMap(r => [r.z - r.depth / 2 - halfD - gap, r.z + r.depth / 2 + halfD + gap])]);
+        if (item.original) { xs.sort((a, b) => Math.abs(a - px) - Math.abs(b - px)); zs.sort((a, b) => Math.abs(a - pz) - Math.abs(b - pz)); }
         for (const x of xs) for (const z of zs) {
-          if (Math.abs(x) + halfW + margin > sw / 2 + 1e-8 || Math.abs(z) + halfD + margin > sd / 2 + 1e-8) continue;
-          if (used.some(r => Math.abs(x - r.x) < (width + r.width) / 2 + gap - 1e-8 && Math.abs(z - r.z) < (depth + r.depth) / 2 + gap - 1e-8)) continue;
-          const cx = (bounds.min[0] + bounds.max[0]) / 2, cz = (bounds.min[2] + bounds.max[2]) / 2;
-          node.parent = support.node.id; node.surface = surface.id; node.rotation = [0, yaw, 0]; node.scale = [scale, scale, scale];
-          node.position = [surface.position[0] + x - (yaw ? cz : cx) * scale, surface.position[1] - bounds.min[1] * scale + .005, surface.position[2] + z - (yaw ? -cx : cz) * scale];
-          used.push({ x, z, width, depth });
+          if (--budget < 0) return false;
+          if (x < minX - 1e-8 || x > maxX + 1e-8 || z < minZ - 1e-8 || z > maxZ + 1e-8) continue;
+          if (blockers.some(r => Math.abs(x - r.x) < (width + r.width) / 2 + gap - 1e-8 && Math.abs(z - r.z) < (depth + r.depth) / 2 + gap - 1e-8)) continue;
+          const nextX = surface.position[0] + x - (yaw ? cz : cx) * scale, nextZ = surface.position[2] + z - (yaw ? -cx : cz) * scale;
+          if (item.original && Math.hypot(nextX - item.original.x, nextZ - item.original.z) > .4) continue;
+          if (item.support) {
+            node.position[0] = nextX; node.position[2] = nextZ;
+          } else {
+            node.parent = support.node.id; node.surface = surface.id; node.rotation = [0, yaw, 0]; node.scale = [scale, scale, scale];
+            node.position = [nextX, surface.position[1] - bounds.min[1] * scale + .005, nextZ];
+          }
+          used.push({ x, z, width, depth, bottom: .005, top });
           if (place(index + 1)) return true;
           used.pop();
           if (budget < 0) return false;
@@ -127,5 +160,10 @@ function placeGiftObjects(definition: RoomDefinition) {
     }
     return false;
   }
-  if (!place(0)) throw new Error(`Not enough tabletop space for ${missing}; enlarge or add a desk, dining-table, table, cabinet or nightstand`);
+  if (!place(0)) {
+    const item = items.find(item => item.node.id === missing)!;
+    const size = [item.bounds.max[0] - item.bounds.min[0], item.bounds.max[1] - item.bounds.min[1], item.bounds.max[2] - item.bounds.min[2]].map(n => +n.toFixed(3));
+    const available = (item.support ? [item.support] : supports).map(s => `${s.key}=${s.surface.size.map(n => +n.toFixed(3)).join("x")}m`).join(", ");
+    throw new Error(`Not enough tabletop space for ${missing} (width/height/depth=${size.join("/")}m; supports: ${available}); preserve this object and correct its local position, supporting surface or obstructing parts. Small props only move up to 0.4m automatically; enlarge or add a suitable real support if needed`);
+  }
 }

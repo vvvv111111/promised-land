@@ -7,11 +7,14 @@ from hashlib import sha256
 import json
 import math
 import os
+import re
 from pathlib import Path
 import sys
 import urllib.error
 import urllib.request
 from uuid import uuid4
+from photo_coat import PROMPT as PHOTO_COAT_PROMPT, validate_photo_coat, protect_review_coat
+from studio_runtime import photo_coat_available
 
 FALLBACKS = {"cat": ("cat", "kitten"), "dog": ("dog", "puppy")}
 REGIONAL_PRESETS = {
@@ -73,19 +76,21 @@ def regional_presets(library, studio):
 def capabilities(library):
     studio = library / "outputs" / "PetStudio"
     return {"primaryAvailable": primary_available(studio),
-            "regionalPresets": list(regional_presets(library, studio))}
+            "regionalPresets": list(regional_presets(library, studio)),
+            "photoCoatAvailable": primary_available(studio) and photo_coat_available(studio)}
 
 
-def recognition_prompt(presets=None, primary=True):
+def recognition_prompt(presets=None, primary=True, photo_coat_enabled=False):
     if not primary:
         return PROMPT + "\n当前未安装主模板，只能匹配四款备选模型。fits_primary 必须为 false，generation_plan 为 null；按可见物种、年龄和体型选择同物种 fallback_id。备选原有毛色和静态姿态无法修改，不要声称复刻了照片毛色。"
+    base = PROMPT + (PHOTO_COAT_PROMPT if photo_coat_enabled else "")
     if not presets:
-        return PROMPT
+        return base
     rules = []
     for name, preset in presets.items():
         pet, color, accent = preset["appearance"]
         rules.append(f"{name}：{preset['rule']} 固定 pet={pet}、color={color}、accent={accent}。")
-    return PROMPT + "\n本机还支持以下分区预设，适配照片时优先于普通 patches。\n" + "\n".join(rules) + "\n分区预设的 scale=1、amount=0.5、seed=0。特征明显不吻合或关键区域不可见时保留普通花纹，并在 mapping_losses 中记录无法还原的细节。"
+    return base + "\n本机还支持以下分区预设，适配照片时优先于普通 patches。\n" + "\n".join(rules) + "\n分区预设的 scale=1、amount=0.5、seed=0。特征明显不吻合或关键区域不可见时保留普通花纹，并在 mapping_losses 中记录无法还原的细节。"
 
 
 def validate_appearance(params, species, presets):
@@ -125,45 +130,97 @@ def mapping_losses(value):
     return value
 
 
-def recognize(photo, mime, key, primary_available=True, presets=None):
+def mimo_completion(body, key):
     base = os.environ.get("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1").strip().rstrip("/")
     from urllib.parse import urlsplit
     parsed = urlsplit(base)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("MiMo 服务地址必须是不含凭证和查询参数的 HTTPS 地址")
-    body = {
-        "model": os.environ.get("MIMO_MODEL", "mimo-v2.6-pro"),
-        "messages": [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {
-                "url": "data:" + mime + ";base64," + base64.b64encode(photo).decode("ascii"),
-            }},
-            {"type": "text", "text": recognition_prompt(presets, primary_available)},
-        ]}],
-        "thinking": {"type": "disabled"},
-        "response_format": {"type": "json_object"},
-        "max_completion_tokens": 2000,
-    }
-    request = urllib.request.Request(
-        base + "/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={"api-key": key, "Content-Type": "application/json"},
-    )
+    request = urllib.request.Request(base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
+                                     headers={"api-key": key, "Content-Type": "application/json"})
     try:
-        with urllib.request.build_opener(NoRedirect()).open(request, timeout=150) as response:
+        with urllib.request.build_opener(NoRedirect()).open(request, timeout=100) as response:
             result = json.load(response)
     except urllib.error.HTTPError as error:
         raise ValueError(f"MiMo API HTTP {error.code}") from None
     choice = result["choices"][0]
     if choice.get("finish_reason") != "stop" or not result.get("id"):
         raise ValueError("MiMo 返回不完整")
+    return result, choice
+
+
+def recognize(photo, mime, key, primary_available=True, presets=None, photo_coat_enabled=False, _repair=None, _previous=None):
+    body = {
+        "model": os.environ.get("MIMO_MODEL", "mimo-v2.6-pro"),
+        "messages": [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {
+                "url": "data:" + mime + ";base64," + base64.b64encode(photo).decode("ascii"),
+            }},
+            {"type": "text", "text": recognition_prompt(presets, primary_available, photo_coat_enabled)},
+        ]}],
+        "thinking": {"type": "disabled"},
+        "response_format": {"type": "json_object"},
+        "max_completion_tokens": 6000 if photo_coat_enabled else 2000,
+    }
+    if _repair:
+        body["messages"].extend([
+            {"role": "assistant", "content": json.dumps(_previous, ensure_ascii=False)},
+            {"role": "user", "content": "上次结果未通过本地校验：" + _repair + "。请根据原照片重新返回完整 JSON，严格遵守字段和取值，不改变已经正确观察到的毛色部位。"},
+        ])
+    result, choice = mimo_completion(body, key)
+    recognition = json.loads(choice["message"]["content"])
+    try:
+        if recognition.get("template_fit", {}).get("fits_primary") is True:
+            validate_appearance(parse_appearance(recognition["generation_plan"]), recognition.get("species"), presets or {})
+            if photo_coat_enabled:
+                validate_photo_coat(recognition.get("photo_coat"))
+        mapping_losses(recognition.get("mapping_losses", []))
+    except (ValueError, KeyError, TypeError) as error:
+        if _repair:
+            raise ValueError("宠物识别参数修复后仍无效") from error
+        repaired = recognize(photo, mime, key, primary_available, presets, photo_coat_enabled, str(error), recognition)
+        repaired["validation_repair"] = {"response_id": result["id"], "usage": result.get("usage"), "error": str(error)}
+        return repaired
     return {
         "input_type": "image_url/base64",
         "image_sha256": sha256(photo).hexdigest(),
         "response_id": result["id"],
         "response_model": result.get("model"),
         "usage": result.get("usage"),
-        "recognition": json.loads(choice["message"]["content"]),
+        "recognition": recognition,
     }
+
+
+def review_photo_coat(photo, mime, key, coat, params, run):
+    """One bounded visual comparison, with a data-only correction if needed."""
+    content = [{"type": "text", "text": "依次是原宠物照片、模型正面、模型侧面。只比较可见毛色、花纹所在部位与面积，忽略卡通体型、姿势和灯光差异。"}]
+    for data, image_mime in ((photo, mime), ((run / "review-front.png").read_bytes(), "image/png"), ((run / "review-side.png").read_bytes(), "image/png")):
+        content.append({"type": "image_url", "image_url": {"url": "data:" + image_mime + ";base64," + base64.b64encode(data).decode("ascii")}})
+    prompt = PHOTO_COAT_PROMPT + "\n当前物种：" + params["pet"] + "，当前 photo_coat：" + json.dumps(coat, ensure_ascii=False)
+    prompt += "\n先仅看第一张原照片，记录锚点主色 anchors={head:头顶主色,back:背部主色,chest:胸前主色,paws:爪尖主色}，值为#rrggbb；不可见为null。混色取该部位面积最大的颜色，不要按品种默认白色。特别是黑头三花不能被改成白头。"
+    prompt += "\n返回且仅返回 JSON：{matches:布尔,issues:字符串数组,anchors:上述四键对象,photo_coat:对象或null}。matches=true 时 photo_coat=null；明显不符时返回完整修正版。保留当前base和已匹配部位，仅修正issues列出的问题，不重做整只猫狗。额头在头部坐标v=.7~.9，鼻口在v=.1~.3，不能把额头橙斑移到鼻子。脸部斑块要避开照片中的白口鼻；白爪与整条白腿需区分；黑背鞍在模型侧面应清楚可见。禁止按品种补出照片里没有的白额纹和白尾尖。issues 只描述目前可见不符或无法还原的部位。"
+    content.append({"type": "text", "text": prompt})
+    result, choice = mimo_completion({"model": os.environ.get("MIMO_MODEL", "mimo-v2.6-pro"),
+        "messages": [{"role": "user", "content": content}], "thinking": {"type": "disabled"},
+        "response_format": {"type": "json_object"}, "max_completion_tokens": 5000}, key)
+    review = json.loads(choice["message"]["content"])
+    if not isinstance(review, dict) or set(review) != {"matches", "issues", "anchors", "photo_coat"} or type(review["matches"]) is not bool:
+        raise ValueError("毛色对照结果无效")
+    anchors = review["anchors"]
+    if not isinstance(anchors, dict) or set(anchors) != {"head", "back", "chest", "paws"} or any(c is not None and (not isinstance(c, str) or not re.fullmatch(r"#[a-fA-F0-9]{6}", c)) for c in anchors.values()):
+        raise ValueError("照片毛色锚点无效")
+    mapping_losses(review["issues"])
+    if review["matches"]:
+        if review["photo_coat"] is not None:
+            raise ValueError("毛色对照状态与修正冲突")
+    else:
+        validate_photo_coat(review["photo_coat"])
+    # A correction cannot throw away the photo's dominant head/body colors.
+    candidate = protect_review_coat(coat, coat if review["matches"] else review["photo_coat"], anchors)
+    if candidate != coat:
+        review["matches"] = False
+        review["photo_coat"] = candidate
+    return {"response_id": result["id"], "usage": result.get("usage"), **review}
 
 
 def parse_appearance(plan):
@@ -204,9 +261,9 @@ def generate(args):
         selection = library / "outputs" / "Pet_Model_Selection"
     primary_enabled = primary_available(studio)
     presets = regional_presets(library, studio)
-    for required in (selection / "sources.json",):
-        if not required.is_file():
-            raise ValueError(f"素材库缺少 {required}")
+    photo_coat_enabled = primary_enabled and photo_coat_available(studio)
+    if not primary_enabled and not (selection / "sources.json").is_file():
+        raise ValueError("素材库缺少可用的宠物模板")
     mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}.get(args.photo.suffix.lower())
     if mime is None or not 0 < args.photo.stat().st_size <= 20_000_000:
         raise ValueError("照片需为 JPEG 或 PNG，最大 20 MB")
@@ -219,7 +276,7 @@ def generate(args):
         key = (os.environ.get("MIMO_API_KEY") or (getpass("MiMo API key: ") if sys.stdin.isatty() else "")).strip()
         if not key:
             raise ValueError("未提供 MiMo 密钥")
-        receipt = recognize(photo, mime, key, primary_enabled, presets)
+        receipt = recognize(photo, mime, key, primary_enabled, presets, photo_coat_enabled)
     if (receipt.get("input_type") != "image_url/base64" or not receipt.get("response_id")
             or receipt.get("image_sha256") != sha256(photo).hexdigest()):
         raise ValueError("识图回执与照片不匹配")
@@ -245,14 +302,30 @@ def generate(args):
         if not primary_enabled:
             raise ValueError("未安装 PetStudio 主模板，无法执行毛色生成")
         plan = validate_appearance(parse_appearance(recognition["generation_plan"]), species, presets)
+        coat = recognition.get("photo_coat")
+        if coat is not None:
+            validate_photo_coat(coat)
+            if not photo_coat_enabled:
+                raise ValueError("当前 PetStudio 不支持照片毛色分区")
         sys.path.insert(0, str(studio))
         from server import validate
         from render import render_template
         params = validate_appearance(validate(dict(plan)), species, presets)
         if params != plan:
             raise ValueError("PetStudio 改变了请求的毛色参数")
-        summary.update(render_template(studio, run, params, args.chrome))
+        summary.update(render_template(studio, run, params, args.chrome, coat) if coat is not None else render_template(studio, run, params, args.chrome))
+        if coat is not None and mode == "live_mimo":
+            review = review_photo_coat(photo, mime, key, coat, params, run)
+            receipt["coat_review"] = review
+            if not review["matches"] and review["photo_coat"] != coat:
+                receipt["initial_photo_coat"] = coat
+                coat = review["photo_coat"]
+                recognition["photo_coat"] = coat
+                summary.update(render_template(studio, run, params, args.chrome, coat))
+            write_json(run / "recognition.json", receipt)
         summary.update(status="generated", template="original_" + species, appearance_changed=True, params=params)
+        if coat is not None:
+            summary["photo_coat"] = coat
         if params["pattern"] in presets:
             summary["regional_preset"] = presets[params["pattern"]]["catalog"][1]
     elif fallback is not None:

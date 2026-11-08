@@ -53,49 +53,27 @@
 .winter-app .winter-primary:hover { background: #344636; }
 .winter-app .winter-secondary { color: var(--gift-green); background: var(--gift-secondary); }
 .winter-app .winter-secondary:hover { background: #dedfd2; }
-.winter-app button:disabled, .winter-app .is-disabled { color: #687063; background: #e6e6de; cursor: not-allowed; }
-.winter-app .is-disabled { pointer-events: none; }
+.winter-app button:disabled { color: #687063; background: #e6e6de; cursor: not-allowed; }
 .winter-action-row { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 24px; }
 .winter-page-note { margin-top: 10px !important; font-size: 14px; color: var(--muted); }
 .winter-notice { width: min(100% - 40px, 760px); margin: 20px auto 0; padding: 12px 16px; background: #f0e5d8; color: #78492c; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; }
 .winter-notice button { min-width: 44px; min-height: 44px; display: grid; place-items: center; background: transparent; border: 0; color: inherit; }
-.winter-create-layout { max-width: 640px; margin: auto; padding: 36px 0 80px; }
-.winter-form { margin-top: 32px; }
+.winter-gift-details { margin-top: 28px; padding-block: 20px; border-top: 1px solid var(--gift-line); }
+.winter-gift-details summary { min-height: 44px; cursor: pointer; color: var(--gift-green); font-size: 14px; }
+.winter-gift-details summary span { margin-left: 12px; color: var(--muted); font-size: 12px; }
+.winter-form { max-width: 640px; }
+.winter-details-error { margin-top: 12px !important; color: #89472f; font-size: 13px; }
 .winter-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .winter-form label { display: grid; gap: 8px; margin-top: 24px; font-size: 14px; }
 .winter-form input:not([type=file]), .winter-form textarea { width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid var(--gift-line); border-radius: 6px; background: #fffdf8; color: var(--foreground); font-size: 16px; line-height: 1.7; resize: vertical; }
 .winter-form input::placeholder, .winter-form textarea::placeholder { color: #747b6e; opacity: 1; }
-.winter-field-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.winter-field-heading label { margin: 0; }
-.winter-field-heading > span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .winter-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.winter-photo-row { display: flex; gap: 12px; margin-top: 12px; }
-.winter-upload { display: flex !important; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-width: 0; min-height: 136px; margin: 0 !important; border: 1px dashed #a1ac97; border-radius: 6px; color: var(--gift-green); cursor: pointer; }
-.winter-upload:hover { background: var(--gift-secondary); }
-.winter-photo { flex: 1; position: relative; min-width: 0; max-width: calc((100% - 24px) / 3); height: 136px; overflow: hidden; border-radius: 6px; }
-.winter-photo img { width: 100%; height: 100%; object-fit: cover; }
-.winter-photo button { position: absolute; top: 4px; right: 4px; min-width: 44px; min-height: 44px; display: grid; place-items: center; background: #fffdf8e8; color: #343d35; border: 0; border-radius: 4px; }
-.winter-photo small { position: absolute; inset: auto 0 0; text-align: center; padding: 4px; color: #fffdf8; background: #343d35cc; font-size: 11px; }
-.winter-help { margin-top: 10px !important; font-size: 12px; line-height: 1.9; color: var(--muted); }
-.winter-photo-error { margin-top: 10px !important; font-size: 13px; color: #89472f; }
-.winter-photo-error:empty { display: none; }
 .winter-form-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 28px; }
 .winter-form-actions > span { font-size: 12px; color: var(--muted); }
-.winter-retry { margin-left: 12px; min-height: 44px; padding: 0; border: 0; color: var(--gift-green); background: transparent; text-decoration: underline; text-underline-offset: 4px; }
 .winter-sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-.winter-form input[type=file]:focus-visible { position: static !important; clip: auto; width: 100%; height: auto; margin: 12px 0; }
-.winter-generation, .winter-complete-copy { max-width: 500px; margin: auto; padding: 100px 0 80px; }
-.winter-generation > h1, .winter-generation > .winter-page-note, .winter-complete-copy > h1 { text-align: center; }
-.winter-generation ol { margin: 40px 0; padding: 0; list-style: none; }
-.winter-generation li { display: flex; align-items: center; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--gift-line); color: var(--muted); font-size: 14px; }
-.winter-generation li > span { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--gift-secondary); font-size: 12px; }
-.winter-generation li small { margin-left: auto; white-space: nowrap; font-size: 12px; }
-.winter-generation .active, .winter-generation .done { color: var(--gift-green); }
-.winter-generation .done > span { background: var(--gift-green); color: #fffdf8; }
-.winter-share { margin: 36px 0 32px; padding-block: 24px; border-block: 1px solid var(--gift-line); }
-.winter-share h2 { font-size: 14px; }
-.winter-share-placeholder { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; }
-.winter-share-placeholder > span { color: var(--muted); font-size: 13px; }
+.winter-complete-copy { max-width: 500px; margin: auto; padding: 100px 0 80px; }
+.winter-complete-copy > h1 { text-align: center; }
+.winter-package { margin: 36px 0 32px; padding-block: 24px; text-align: center; }
 .winter-open-copy { max-width: 560px; margin: auto; padding: 48px 0 72px; text-align: center; }
 .winter-signature { margin-top: 8px !important; font-size: 13px; color: var(--muted); }
 .winter-open-globe { display: block; width: min(440px, 100%); height: auto; margin: 16px auto; }
@@ -137,14 +115,9 @@
   .winter-header { padding: 20px 0; }
   .winter-brand > span { font-size: 19px; }
   .winter-music { font-size: 11px !important; }
-  .winter-create-layout { padding-top: 24px; }
   .winter-field-pair { gap: 12px; }
   .winter-form label { font-size: 13px; }
-  .winter-photo-row { gap: 8px; }
-  .winter-photo { height: 110px; max-width: calc((100% - 16px) / 3); }
-  .winter-upload { min-height: 110px; font-size: 13px !important; }
-  .winter-generation, .winter-complete-copy { padding-top: 64px; }
-  .winter-share-placeholder { align-items: flex-start; flex-direction: column; }
+  .winter-complete-copy { padding-top: 64px; }
   .winter-open-copy { padding-top: 36px; }
   .winter-room-heading { flex-direction: column; align-items: stretch; gap: 20px; }
   .winter-room-actions > * { flex: 1; }

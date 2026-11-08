@@ -1,6 +1,7 @@
 import { cancelRoomGeneration, continueRoomGeneration, generateRoom, mimoConfig, RoomAgentError, startRoomGeneration } from "../../../lib/server/roomAgent";
 import { MAX_ROOM_REFERENCE_LENGTH } from "../../../room/agent/reference";
 import { validateRoomReference } from "../../../lib/server/roomReference";
+import { MAX_CURRENT_ROOM_BYTES } from "../../../room/agent/context";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       while (true) {
         const { done, value } = await reader.read(); if (done) break;
         size += value.byteLength;
-        if (size > MAX_ROOM_REFERENCE_LENGTH + 12_000) { await reader.cancel(); return Response.json({ error: { code: "INPUT_TOO_LARGE", message: "参考照片或描述过大，请更换较小的照片后重试。" } }, { status: 413, headers }); }
+        if (size > MAX_ROOM_REFERENCE_LENGTH + MAX_CURRENT_ROOM_BYTES + 12_000) { await reader.cancel(); return Response.json({ error: { code: "INPUT_TOO_LARGE", message: "参考照片或描述过大，请更换较小的照片后重试。" } }, { status: 413, headers }); }
         chunks.push(value);
       }
     } finally { reader.releaseLock(); }
@@ -54,7 +55,9 @@ export async function POST(request: Request) {
   }
   const prompt = data && typeof data === "object" && "prompt" in data ? data.prompt : undefined;
   const referenceImage = data && typeof data === "object" && "referenceImage" in data ? data.referenceImage : undefined;
-  if (referenceImage === undefined && size > 12_000) return Response.json({ error: { code: "INPUT_TOO_LARGE", message: "描述过长，请限制在 2000 字以内。" } }, { status: 413, headers });
+  const currentRoom = data && typeof data === "object" && "currentRoom" in data ? data.currentRoom : undefined;
+  const contextBudget = currentRoom === undefined ? 0 : MAX_CURRENT_ROOM_BYTES;
+  if (referenceImage === undefined && size > 12_000 + contextBudget || referenceImage !== undefined && size > MAX_ROOM_REFERENCE_LENGTH + 12_000 + contextBudget) return Response.json({ error: { code: "INPUT_TOO_LARGE", message: "照片、描述或当前方案过大，请缩减后重试。" } }, { status: 413, headers });
   if ((prompt !== undefined && typeof prompt !== "string") || (typeof prompt === "string" && prompt.length > 2000) || (!referenceImage && (typeof prompt !== "string" || !prompt.trim()))) return Response.json({ error: { code: "INVALID_INPUT", message: "请填写房间描述或上传参考照片，文字不超过 2000 字。" } }, { status: 400, headers });
   if (referenceImage !== undefined) {
     try { validateRoomReference(referenceImage); }
@@ -62,11 +65,11 @@ export async function POST(request: Request) {
   }
   if (active >= 2) return Response.json({ error: { code: "BUSY", message: "正在处理其他生成任务，请稍后重试。" } }, { status: 429, headers });
   if (data && typeof data === "object" && "continuous" in data && data.continuous === true) {
-    try { return Response.json(startRoomGeneration(typeof prompt === "string" ? prompt.trim() : "", referenceImage as string | undefined), { status: 202, headers }); }
+    try { return Response.json(startRoomGeneration(typeof prompt === "string" ? prompt.trim() : "", referenceImage as string | undefined, currentRoom), { status: 202, headers }); }
     catch (error) { return errorResponse(error); }
   }
   active++;
-  try { return Response.json(await generateRoom(typeof prompt === "string" ? prompt.trim() : "", request.signal, referenceImage as string | undefined), { headers }); }
+  try { return Response.json(await generateRoom(typeof prompt === "string" ? prompt.trim() : "", request.signal, referenceImage as string | undefined, currentRoom), { headers }); }
   catch (error) { return errorResponse(error); }
   finally { active--; }
 }

@@ -3,15 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run build:gift-viewer",
+    "prebuild": "npm run build:gift-viewer",
+    "build:gift-viewer": "node scripts/build-gift-viewer.cjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/check-state.cjs",
+    "pretest": "npm run build:gift-viewer",
     "prepare:pets": "node scripts/prepare-pet-library.cjs",
     "test:pets": "node scripts/check-pet-agent.cjs"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "next": "16.4.5",
     "phaser": "3.90.0",
     "react": "19.3.1",
@@ -23,6 +28,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/three": "^0.187.0",
+    "esbuild": "^0.28.2",
     "meshoptimizer": "1.1.1",
     "sharp": "0.35.5",
     "typescript": "7.0.2"

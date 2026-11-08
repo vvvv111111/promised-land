@@ -1,0 +1,72 @@
+// Explicit opt-in: one real MiMo request using a public project fixture.
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { confirmPreview } = require('./room-editor-browser-helpers.cjs');
+const base = process.env.ROOM_URL || 'http://127.0.0.1:3106';
+const key = 'promised-land:room-agent:v1';
+const photo = process.env.PET_PHOTO_FIXTURE || 'public/assets/warm-room-v1/cat_orange_01.png';
+const species = process.env.PET_PHOTO_SPECIES || 'cat';
+if (process.env.PET_AGENT_LIVE !== '1') throw Error('Set PET_AGENT_LIVE=1 to run a real MiMo request.');
+
+(async () => {
+  fs.mkdirSync('.room-qa/pet-photo', { recursive: true });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.ROOM_CHROMIUM || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+    const page = await context.newPage(), errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.setDefaultTimeout(60_000);
+    const status = await (await context.request.get(base + '/api/pet-agent')).json();
+    assert.equal(status.configured, true);
+    assert.equal(status.primaryAvailable, true);
+    const removed = await context.request.post(base + '/api/pet-agent', { data: { templateId: 'cat' } });
+    assert.equal(removed.status(), 400, 'Manual model selection is removed from the API');
+    await page.goto(base + '/room-3d');
+    await page.getByRole('tab', { name: '宠物', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: /选模型|用照片|识别匹配|预览模型/ }).count(), 0);
+    assert.equal(await page.locator('#pet-agent-template').count(), 0);
+    await page.locator('#pet-agent-photo').setInputFiles(photo);
+    const generate = page.getByRole('button', { name: '生成宠物', exact: true });
+    await generate.waitFor();
+    const submitted = page.waitForResponse(r => r.url().endsWith('/api/pet-agent') && r.request().method() === 'POST');
+    const complete = page.waitForResponse(async r => {
+      if (!r.url().includes('/api/pet-agent?id=') || r.request().method() !== 'GET') return false;
+      return (await r.json()).status !== 'running';
+    }, { timeout: 270_000 });
+    await generate.click();
+    const initial = await submitted;
+    assert.equal(initial.status(), 202);
+    const job = await initial.json();
+    assert.equal(await generate.count(), 0, 'Generation button is hidden while running');
+    await page.getByText('正在生成宠物…', { exact: true }).waitFor();
+    console.log('Submitted real photo job:', job.id);
+    const result = await (await complete).json();
+    assert.equal(result.status, 'succeeded', result.error);
+    assert.equal(result.result.species, species);
+    assert.equal(result.result.appearanceChanged, true);
+    assert.equal(result.result.template, 'original_' + species);
+    assert.ok(result.result.photoCoat,'Photo-observed coat layout must reach the browser');
+    assert.ok(result.result.glb.length > 1000);
+    await confirmPreview(page);
+    const value = await page.evaluate(k => JSON.parse(localStorage.getItem(k)), key);
+    const pet = value.definition.nodes.find(n => n.petAsset);
+    assert.equal(pet.petAsset.appearanceChanged, true);
+    assert.equal(pet.petAsset.template, 'original_' + species);
+    assert.deepEqual(pet.petAsset.photoCoat,result.result.photoCoat);
+    assert.equal(pet.petAsset.glb, '');
+    assert.match(pet.petAsset.assetId, /^[a-f0-9]{64}$/);
+    assert.ok(JSON.stringify(value).length < 100_000);
+    await page.screenshot({ path: '.room-qa/pet-photo/live-desktop.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: '.room-qa/pet-photo/live-mobile.png', fullPage: true });
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('.room3d-actions button')?.disabled === false);
+    assert.deepEqual(await page.evaluate(k => JSON.parse(localStorage.getItem(k)), key), value);
+    assert.deepEqual(errors, []);
+    const report = { mode: 'live_mimo', status: 'passed', jobId: job.id, species: pet.petAsset.species, template: pet.petAsset.template, appearance: pet.petAsset.appearance, photoCoat:pet.petAsset.photoCoat, bytes: Buffer.from(result.result.glb, 'base64').length, assetId: pet.petAsset.assetId, reload: true };
+    fs.writeFileSync('.room-qa/pet-photo/live-result.json', JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(report));
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

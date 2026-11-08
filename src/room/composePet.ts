@@ -47,7 +47,7 @@ export function composePet(input: RoomDefinition, asset: PetAsset, previous?: Ro
     validateRoomDefinition(plan);
     return plan;
   }
-  throw new Error("房间内没有足够的落脚空间，当前房间和宠物已保留。请调整家具或明确缩小宠物尺寸后重试。");
+  throw new Error("房间内没有足够的落脚空间，当前房间和宠物已保留。请调整房间布局后重试。");
 }
 
 export function preservePet(next: RoomDefinition, previous: RoomDefinition) {

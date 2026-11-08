@@ -66,7 +66,8 @@ export function parseGeneratedAsset(value: unknown, normalizeOrigin = true): Gen
   // A model's shape-local origin carries no scene elevation. Canonicalize the
   // whole recipe together; only real floor/support placement determines height.
   if (normalizeOrigin) {
-    for (const part of asset.parts) part.position[1] -= b.min[1];
+    // Already-canonical floating-point bounds must stay byte-stable on save/reload.
+    if (Math.abs(b.min[1]) > 1e-9) for (const part of asset.parts) part.position[1] -= b.min[1];
   } else if (Math.abs(b.min[1]) > .012) throw new Error(`generated asset ${asset.label} must use canonical y=0 origin`);
   return asset;
 }

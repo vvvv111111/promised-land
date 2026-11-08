@@ -34,7 +34,6 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const [content, setContent] = useState<GiftContent | null>(null);
-  const [lampOn, setLampOn] = useState(false);
   const [warning, setWarning] = useState("");
   const [loadError, setLoadError] = useState("");
   const [audioOpen, setAudioOpen] = useState(false);
@@ -45,7 +44,7 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
     let cancelled = false;
     let current: RoomView | undefined;
     async function mount() {
-      setStatus("loading"); setLampOn(false); setWarning(""); setLoadError("");
+      setStatus("loading"); setWarning(""); setLoadError("");
       const currentMode = giftId === EXAMPLE_GIFT_ID ? "recipient" : mode ?? (new URLSearchParams(window.location.search).get("mode") === "recipient" ? "recipient" : "sender");
       setEditable(currentMode === "sender");
       try {
@@ -61,7 +60,6 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
           photo: photo?.kind === "photo_frame" ? photo : undefined,
           onReady: () => { if (!cancelled) { setStatus("ready"); events.current.onReady?.(); } },
           onOpen: id => { setContent(giftRef.current?.object_contents[id] ?? null); if (currentMode === "recipient") events.current.onItemCollected?.(id); },
-          onLamp: setLampOn,
           onAudioRequest: () => { setAudioOpen(true); if (currentMode === "recipient") events.current.onItemCollected?.("cd-player"); },
           onFocusChange: setFocusedObject,
           onError: message => { if (!cancelled) { setLoadError(message ?? ""); setStatus("error"); events.current.onError?.(); } },
@@ -109,7 +107,6 @@ export default function RoomPreview({ definition, giftId = WINTER_GIFT_ID, mode,
         <button type="button" disabled={!ready} aria-pressed={focusedObject === "sunset-frame"} onClick={() => view.current?.activate("sunset-frame")}>相框</button>
         <button type="button" disabled={!ready} aria-pressed={focusedObject === "sealed-letter"} onClick={() => view.current?.activate("sealed-letter")}>信件</button>
         <button type="button" disabled={!ready} aria-pressed={focusedObject === "cd-player"} onClick={() => view.current?.activate("cd-player")}>CD 机</button>
-        <button type="button" disabled={!ready} aria-pressed={lampOn} onClick={() => view.current?.activate("lamp")}>{lampOn ? "关灯" : "开灯"}</button>
       </div>
       {warning && <p className="room3d-warning" role="alert">{warning}</p>}
       <RoomAudioDialog open={audioOpen} close={closeAudio} giftId={giftId} editable={editable} pauseRequested={callbacks.backgroundPlaying} onPlayingChange={playing => { view.current?.setAudioPlaying(playing); events.current.onAudioPlaying?.(playing); }} onBounds={bounds => view.current?.setPanelBounds(bounds)} />

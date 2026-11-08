@@ -43,7 +43,7 @@ class RegionalTests(unittest.TestCase):
         return dict(pet=pet, color=color, accent=accent, pattern=name, scale=1, amount=.5, seed=0)
 
     def test_capability_dependencies_and_catalog(self):
-        self.assertEqual(agent.capabilities(self.library), {"primaryAvailable": False, "regionalPresets": []})
+        self.assertEqual(agent.capabilities(self.library), {"primaryAvailable": False, "regionalPresets": [], "photoCoatAvailable": False})
         patterns = self.provision()
         self.assertEqual(list(agent.regional_presets(self.library, self.studio)), list(agent.REGIONAL_PRESETS))
         patterns["Dog"]["SaddleWhiteChestLegs"]["runtime"] = "other"
@@ -91,9 +91,7 @@ class RegionalTests(unittest.TestCase):
 
     def test_replay_records_params_and_losses_after_studio_validation(self):
         self.provision()
-        selection = self.library / "outputs" / "Pet_Model_Selection_Room"
-        selection.mkdir()
-        (selection / "sources.json").write_text("[]", encoding="utf-8")
+        # An installed primary template works without the optional fallback library.
         photo = self.library / "test.png"
         photo.write_bytes(b"offline receipt fixture")
         receipt_path = self.library / "receipt.json"

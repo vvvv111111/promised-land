@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const python = process.env.PET_AGENT_PYTHON || (fs.existsSync('pet-recognition-generation/.venv/Scripts/python.exe') ? path.resolve('pet-recognition-generation/.venv/Scripts/python.exe') : 'python');
-require('node:child_process').execFileSync(python,['-B','-X','utf8','-m','unittest','discover','-s','pet-recognition-generation','-p','test_agent.py'],{stdio:'inherit'});
+require('node:child_process').execFileSync(python,['-B','-X','utf8','-m','unittest','discover','-s','pet-recognition-generation','-p','test*.py'],{stdio:'inherit'});
 const output = path.resolve('.room-qa/pet-state'); fs.mkdirSync(output,{recursive:true});
 fs.writeFileSync(path.join(output,'package.json'),JSON.stringify({type:'module'}));
 fs.writeFileSync(path.join(output,'tsconfig.json'),JSON.stringify({extends:'../../tsconfig.json',compilerOptions:{noEmit:false,incremental:false,outDir:'.',rootDir:'../../src',types:['node'],typeRoots:[path.resolve('node_modules/@types')]},include:['../../src/room/composePet.ts','../../src/room/models/petGlb.ts','../../src/room/agent/examples.ts','../../src/room/agent/persistence.ts','../../src/app/api/pet-agent/route.ts']}));
@@ -46,10 +46,18 @@ function fixtureGlb() {
 module.exports = { fixtureGlb };
 
 async function main() {
+  await require('./check-pet-coat.cjs')();
   const glb = fixtureGlb();
   const asset = await measurePetAsset({ species: 'cat', glb, template: 'fixture', targetLength: .6, upAxis: 'y' });
   assert.ok(asset.size.every((n,i) => Math.abs(n - [.6,.3,.24][i]) < 1e-9));
   validatePetAsset(asset);
+  const photoCoat={version:1,base:'#151515',regions:{chest:'#ffffff'},markings:[]};
+  const photoAsset={...asset,appearanceChanged:true,appearance:{pet:'cat',color:'black',accent:'white',pattern:'patches',scale:1,amount:.5,seed:0},photoCoat};
+  validatePetAsset(photoAsset);
+  const photoRoom=composePet(defaultRoom,photoAsset);
+  const restored=JSON.parse(JSON.stringify(preservePet(roomFromDesign(flexibleBedroomDesign()).definition,photoRoom)));
+  validateRoomDefinition(restored);assert.deepEqual(customPet(restored).petAsset.photoCoat,photoCoat);
+  assert.throws(()=>validatePetAsset({...photoAsset,photoCoat:{...photoCoat,base:'https://bad'}}));
   // Coat controls are separate from measured room dimensions, and survive regeneration/export.
   for (const [species,pattern,color,accent,regionalPreset] of [['cat','bicolor_white','white','brown','BicolorWhite'],['dog','saddle_white','brown','black','SaddleWhiteChestLegs']]) {
     const appearance = {pet:species,color,accent,pattern,scale:1,amount:.5,seed:0};
@@ -102,8 +110,8 @@ async function main() {
   assert.equal((await route.GET(new Request('http://localhost/api/pet-agent?id=expired'))).status,404);
   if (fs.existsSync('.pet-library/outputs/Pet_Model_Selection_Room/sources.json')) {
     for (const id of ['cat','kitten','dog','puppy']) {
-      const response = await route.POST(request({ templateId:id })); assert.equal(response.status,200);
-      const data = await response.json(); decodePetGlb(data.result.glb); assert.equal(data.result.appearanceChanged,false); assert.ok(data.result.license);
+      const response = await route.POST(request({ templateId:id })); assert.equal(response.status,400,'Manual model selection is removed');
+      decodePetGlb(fs.readFileSync(`.pet-library/outputs/Pet_Model_Selection_Room/${id}.glb`).toString('base64'));
     }
   }
   console.log('PASS: measured GLB scale/axes/floor contact, collision relocation, no-space rollback, room regeneration, standalone export persistence, invalid assets, async cancellation/disposal, same-origin API and four real library models');

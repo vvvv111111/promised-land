@@ -52,18 +52,9 @@
 .room-agent-form { display: grid; gap: 12px; max-width: 760px; margin-top: 0; }
 .room-agent-fields { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .pet-agent { margin: 0; padding: 0; }
-.pet-agent-sources { display: flex; gap: 8px; margin-bottom: 20px; }
-.room-agent .pet-agent-sources button { background: transparent; color: var(--muted); }
-.room-agent .pet-agent-sources button[aria-pressed="true"] { background: var(--gift-secondary); color: var(--gift-green); }
 .pet-agent-settings { display: grid; gap: 12px; margin-top: 12px; padding-top: 20px; border-top: 1px solid var(--gift-line); }
-.pet-agent :is(select, input[type="number"]) { width: 100%; min-width: 0; min-height: 48px; border: 1px solid var(--gift-line); border-radius: 6px; padding: 10px 12px; background: #fffdf8; color: var(--foreground); font: inherit; font-size: 14px; caret-color: var(--gift-green); }
-.pet-agent :is(select, input[type="number"]):disabled { background: var(--gift-secondary); color: var(--muted); }
-.pet-agent :is(input, select):focus-visible { outline: 2px solid var(--gift-green); outline-offset: 3px; }
 .room-agent-form label { font-size: 14px; font-weight: 500; }
-.room-agent-file { width: 100%; min-width: 0; font-size: 13px; color: var(--muted); }
-.room-agent-file::file-selector-button { min-height: 48px; margin-right: 12px; padding: 10px 16px; border: 0; border-radius: 6px; color: var(--gift-green); background: var(--gift-secondary); font: inherit; cursor: pointer; }
-.room-agent-file::file-selector-button:hover { background: #dedfd2; }
-.room-agent-file:disabled::file-selector-button { color: var(--muted); cursor: not-allowed; }
+.room-agent .room-agent-upload { justify-self: start; }
 .room-agent .room-agent-photo-help { margin: 0 0 6px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .room-agent-reference { display: grid; gap: 8px; margin-bottom: 8px; }
 .room-agent-reference img { display: block; width: 100%; height: 150px; object-fit: contain; background: var(--gift-secondary); border-radius: 6px; }
@@ -140,5 +131,4 @@
   .room-agent { margin-top: 0; }
   .room-agent-actions span { margin-left: 0; width: 100%; }
   .room-agent textarea { font-size: 16px; }
-  .pet-agent :is(select, input[type="number"]) { font-size: 16px; }
 }

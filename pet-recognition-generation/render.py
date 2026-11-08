@@ -95,12 +95,17 @@ def capture(send, path):
     path.write_bytes(base64.b64decode(send("Page.captureScreenshot", {"format": "png"})["data"]))
 
 
-def render_template(studio, run, params, chrome):
+def render_template(studio, run, params, chrome, photo_coat=None):
     from server import Handler
     from storage import inspect_glb
+    if photo_coat is not None:
+        from studio_runtime import photo_coat_handler
+        Handler = photo_coat_handler(Handler, studio)
 
     with browser(Handler, run, chrome) as (evaluate, send):
         wait_ready(evaluate, "!!window.petStudio")
+        if photo_coat is not None:
+            evaluate("window.petStudio.setPhotoCoat(" + json.dumps(photo_coat) + ")")
         result = evaluate("""(async () => {
           await window.petStudio.apply(PARAMS);
           const style = document.createElement('style');
@@ -114,11 +119,17 @@ def render_template(studio, run, params, chrome):
             raise ValueError("导出路径不在 Variants")
         data = model_path.read_bytes()
         digest = sha256(data).hexdigest()
-        if digest != result["sha256"] or not inspect_glb(data, params).get("skins"):
+        document = inspect_glb(data, params)
+        if digest != result["sha256"] or not document.get("skins"):
             raise ValueError("主模板 GLB 校验失败")
+        if photo_coat is not None and not any(node.get("extras", {}).get("photoCoat") == photo_coat for node in document.get("nodes", [])):
+            raise ValueError("导出模型未保留照片毛色分区")
         for angle, filename in (("threeQuarter", "preview.png"), ("front", "front.png"), ("side", "side.png")):
             evaluate("window.petStudio.setView(" + json.dumps(angle) + ")")
             capture(send, run / filename)
+            if photo_coat is not None and angle in ("front", "side"):
+                thumbnail = send("Page.captureScreenshot", {"format": "png", "clip": {"x": 0, "y": 0, "width": 1000, "height": 1000, "scale": .45}})
+                (run / ("review-" + angle + ".png")).write_bytes(base64.b64decode(thumbnail["data"]))
         (run / "pet.glb").write_bytes(data)
     return {"model": "pet.glb", "preview": "preview.png", "params": params, "sha256": digest}
 

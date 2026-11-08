@@ -14,9 +14,11 @@ import { prepareRoomReference } from "@/lib/media/photos";
 import { defaultRoom, validateRoomDefinition } from "@/room/definition";
 import { preservePet } from "@/room/composePet";
 import PetAgentPanel from "./PetAgentPanel";
+import PhotoUpload from "./PhotoUpload";
 import { persistPetAssets } from "@/lib/storage/petAssetStore";
-import { isRoomGenerationProgress, ROOM_REQUEST_TIMEOUT_MS } from "@/room/agent/generation";
+import { isRoomGenerationProgress, ROOM_GENERATION_TIMEOUT_MS, ROOM_REQUEST_TIMEOUT_MS } from "@/room/agent/generation";
 import RoomGenerationProgress from "./RoomGenerationProgress";
+import { roomForGeneration } from "@/room/agent/context";
 
 const storageKey = "promised-land:room-agent:v1";
 const examples = [
@@ -33,7 +35,7 @@ function readResult(input: unknown): RoomAgentResult {
   if (!run || typeof run.id !== "string" || run.id.length > 100 || typeof run.model !== "string" || run.model.length > 100 || !Number.isSafeInteger(run.attempts) || run.attempts < 1 || !Number.isFinite(run.durationMs) || run.durationMs < 0 || !Number.isSafeInteger(run.totalTokens) || run.totalTokens < 0) throw new Error("invalid run");
   if (run.input !== undefined && run.input !== "text" && run.input !== "image") throw new Error("invalid input mode");
   if (run.referenceDescription !== undefined && (typeof run.referenceDescription !== "string" || run.referenceDescription.length > 500)) throw new Error("invalid reference observation");
-  if (run.positionCorrections !== undefined && (!Number.isSafeInteger(run.positionCorrections) || run.positionCorrections < 0 || run.positionCorrections > 32)) throw new Error("invalid position corrections");
+  if (run.positionCorrections !== undefined && (!Number.isSafeInteger(run.positionCorrections) || run.positionCorrections < 0 || run.positionCorrections > 40)) throw new Error("invalid position corrections");
   return { ...room, run: { id: run.id, model: run.model, attempts: run.attempts, durationMs: run.durationMs, totalTokens: run.totalTokens, ...(run.input ? { input: run.input } : {}), ...(run.referenceDescription ? { referenceDescription: run.referenceDescription } : {}), ...(run.positionCorrections ? { positionCorrections: run.positionCorrections } : {}) } };
 }
 
@@ -65,7 +67,11 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
   const stateCallback = useRef(onSaveStateChange); stateCallback.current = onSaveStateChange;
   useEffect(() => { stateCallback.current?.(!busy && !petBusy && !saving && !draft); }, [busy, petBusy, saving, draft]);
   const definition = draft?.definition ?? result?.definition ?? savedDefinition ?? defaultRoom;
+  // Async room/pet completions may arrive in either order, even within one render.
+  const latestPreview = useRef({ definition, result: draft ? draft.result : result });
+  latestPreview.current = { definition, result: draft ? draft.result : result };
   const locked = busy || petBusy || saving || preparingPhoto;
+  const roomLocked = busy || saving || preparingPhoto;
   useEffect(() => {
     const element = previewContainer.current;
     if (!hydrated || recipient || !element) return;
@@ -112,8 +118,9 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
 
   function preview(next: RoomDefinition, value: RoomAgentResult | null) {
     validateRoomDefinition(next);
+    latestPreview.current = { definition: next, result: value };
     setPreviewReady(false); setPreviewFailed(false);
-    setDraft({ definition: next, result: value }); setNotice(""); setError("");
+    setDraft({ definition: next, result: value }); setNotice("");
   }
 
   async function saveDraft() {
@@ -143,8 +150,9 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
 
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (controller.current || locked || (!prompt.trim() && !reference)) return;
+    if (controller.current || roomLocked || (!prompt.trim() && !reference)) return;
     const request = new AbortController(); controller.current = request;
+    const generationTimeout = window.setTimeout(() => request.abort("generation-timeout"), ROOM_GENERATION_TIMEOUT_MS + 10_000);
     setBusy(true); setError(""); setNotice(""); setGenerationProgress("");
     setGenerationInfo({ startedAt: Date.now(), round: 0, waiting: false });
     let generationId: string | undefined;
@@ -154,7 +162,7 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
         request.signal.throwIfAborted();
         const timeout = window.setTimeout(() => request.abort("timeout"), ROOM_REQUEST_TIMEOUT_MS);
         try {
-          const response = await fetch("/api/room-agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(generationId ? { generationId } : { continuous: true, prompt: prompt.trim(), ...(reference ? { referenceImage: reference.dataUrl } : {}) }), signal: request.signal });
+          const response = await fetch("/api/room-agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(generationId ? { generationId } : { continuous: true, prompt: prompt.trim(), currentRoom: roomForGeneration(latestPreview.current.definition, latestPreview.current.result?.design), ...(reference ? { referenceImage: reference.dataUrl } : {}) }), signal: request.signal });
           data = await response.json();
           request.signal.throwIfAborted();
           if (!response.ok && generationId && [409, 429].includes(response.status) && data?.error?.code === "BUSY") {
@@ -180,13 +188,14 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
       let next: RoomAgentResult;
       try { next = readResult(data); }
       catch { throw new Error("生成方案无法读取，当前房间已保留，请重试。"); }
-      next.definition = preservePet(next.definition, definition);
+      next.definition = preservePet(next.definition, latestPreview.current.definition);
       preview(next.definition, next); setConfigured(true);
     } catch (failure) {
       setGenerationInfo(null);
-      if (request.signal.aborted) setError(request.signal.reason === "timeout" ? "生成超时，请重试。" : "已取消");
+      if (request.signal.aborted) setError(request.signal.reason === "generation-timeout" ? "这次生成用时过长，已停止。当前房间已保留，请重试。" : request.signal.reason === "timeout" ? "生成超时，请重试。" : "已取消");
       else setError(failure instanceof Error ? failure.message : "生成失败，当前房间已保留，请重试。");
     } finally {
+      window.clearTimeout(generationTimeout);
       if (generationId) void fetch(`/api/room-agent?id=${encodeURIComponent(generationId)}`, { method: "DELETE", keepalive: true }).catch(() => {});
       controller.current = null; setBusy(false); setGenerationProgress("");
     }
@@ -200,7 +209,7 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
         onReady={() => { setPreviewReady(true); setPreviewFailed(false); previewProps?.onReady?.(); }}
         onError={() => { setPreviewReady(false); setPreviewFailed(true); previewProps?.onError?.(); }} />
       <div className="room-editor-savebar">
-        <span role="status">{saving ? "保存中…" : busy ? generationProgress || "生成中…" : petBusy || preparingPhoto ? "处理中…" : draft ? previewFailed ? "预览失败" : "预览中" : notice}</span>
+        <span role="status">{saving ? "保存中…" : busy && petBusy ? "房间与宠物生成中…" : busy ? generationProgress || "房间生成中…" : petBusy ? "宠物处理中…" : preparingPhoto ? "处理中…" : draft ? previewFailed ? "预览失败" : "预览中" : notice}</span>
         {draft && <div className="room-agent-actions">
           <button type="button" className="room-agent-primary" disabled={locked || !previewReady || previewFailed} onClick={() => void saveDraft()}>保存</button>
           <button type="button" disabled={locked} onClick={discard}>撤销</button>
@@ -210,18 +219,18 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
     </div>
     <section className="room-agent" aria-label="空间编辑">
       <div className="room-editor-tabs" role="tablist" aria-label="编辑内容" onKeyDown={event => {
-        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || locked) return;
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || saving) return;
         event.preventDefault();
         const next = event.key === "Home" ? "room" : event.key === "End" ? "pet" : tab === "room" ? "pet" : "room";
         setTab(next); document.getElementById(`room-editor-tab-${next}`)?.focus();
       }}>
-        {(["room", "pet"] as const).map(value => <button key={value} id={`room-editor-tab-${value}`} role="tab" type="button" aria-selected={tab === value} aria-controls={`room-editor-panel-${value}`} tabIndex={tab === value ? 0 : -1} disabled={locked} onClick={() => setTab(value)}>{value === "room" ? "房间" : "宠物"}</button>)}
+        {(["room", "pet"] as const).map(value => <button key={value} id={`room-editor-tab-${value}`} role="tab" type="button" aria-selected={tab === value} aria-controls={`room-editor-panel-${value}`} tabIndex={tab === value ? 0 : -1} disabled={saving} onClick={() => setTab(value)}>{value === "room" ? "房间" : "宠物"}</button>)}
       </div>
       <div role="tabpanel" id="room-editor-panel-room" aria-labelledby="room-editor-tab-room" hidden={tab !== "room"}>
         <form onSubmit={generate} className="room-agent-form" aria-busy={busy}>
-          <fieldset className="room-agent-fields" disabled={locked}>
+          <fieldset className="room-agent-fields" disabled={roomLocked}>
             <label htmlFor="room-agent-reference">参考照片（选填）</label>
-            <input className="room-agent-file" id="room-agent-reference" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="room-agent-reference-help" onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; void uploadReference(file); }} />
+            <PhotoUpload id="room-agent-reference" label="房间参考照片" describedBy="room-agent-reference-help" disabled={roomLocked} hasPhoto={!!reference} onSelect={file => void uploadReference(file)} />
             <p id="room-agent-reference-help" className="room-agent-photo-help">12MB 内，生成时发送给 MiMo。</p>
             {reference && <div className="room-agent-reference">
               <img src={reference.dataUrl} alt="房间参考照片" />
@@ -231,7 +240,7 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
             <textarea id="room-agent-prompt" value={prompt} onChange={e => setPrompt(e.target.value)} maxLength={2000} required={!reference} rows={3} placeholder={reference ? "补充要求（选填）" : "例如：浅木色卧室，两扇窗。"} />
             <div className="room-agent-examples" aria-label="示例描述">{examples.map(example => <button key={example.label} type="button" onClick={() => setPrompt(example.prompt)}>{example.label}</button>)}</div>
           </fieldset>
-          {!busy && <button type="submit" className="room-agent-primary" disabled={locked || (!prompt.trim() && !reference)}>生成房间</button>}
+          {!busy && <button type="submit" className="room-agent-primary" disabled={roomLocked || (!prompt.trim() && !reference)}>生成房间</button>}
           {generationInfo && (busy || draft?.result) && !previewFailed && <RoomGenerationProgress
             startedAt={generationInfo.startedAt} round={generationInfo.round}
             phase={busy ? generationInfo.waiting ? "waiting" : generationInfo.round > 0 ? "repairing" : "generating" : previewReady ? "complete" : "previewing"} />}
@@ -241,7 +250,10 @@ export default function RoomAgentWorkbench({ previewProps, onSaveStateChange }: 
         {configured === false && <p className="room-agent-hint">暂时无法生成</p>}
       </div>
       <div role="tabpanel" id="room-editor-panel-pet" aria-labelledby="room-editor-tab-pet" hidden={tab !== "pet"}>
-        <PetAgentPanel definition={definition} disabled={busy || saving || preparingPhoto} onBusyChange={setPetBusy} onChange={async next => { setGenerationInfo(null); preview(next, draft ? draft.result : result); }} />
+        <PetAgentPanel definition={definition} disabled={saving} onBusyChange={setPetBusy} onChange={async update => {
+          const current = latestPreview.current;
+          preview(update(current.definition), current.result);
+        }} />
       </div>
     </section>
   </div>;

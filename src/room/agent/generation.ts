@@ -1,4 +1,7 @@
-/** Each HTTP request performs one model call; validation repairs have no round limit. */
+/** Budgets apply across every continuation, not just one model request. */
+export const ROOM_GENERATION_TIMEOUT_MS = 180_000;
+export const ROOM_MAX_ATTEMPTS = 6;
+export const ROOM_MAX_REPEATED_ISSUES = 3;
 export const ROOM_ATTEMPT_TIMEOUT_MS = 170_000;
 export const ROOM_REQUEST_TIMEOUT_MS = 180_000;
 

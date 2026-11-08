@@ -3,6 +3,7 @@ const { confirmPreview } = require('./room-editor-browser-helpers.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { defaultRoomDesign, bedroomRoomDesign, roomFromDesign } = require('../.room-qa/agent-state/room/agent/design.js');
+const { ROOM_GENERATION_TIMEOUT_MS } = require('../.room-qa/agent-state/room/agent/generation.js');
 const base = process.env.ROOM_URL || 'http://127.0.0.1:3100';
 const key = 'promised-land:room-agent:v1';
 const design = defaultRoomDesign();
@@ -38,6 +39,7 @@ const bedroomFixture = { ...roomFromDesign(bedroomRoomDesign()), run: { ...fixtu
         return route.fulfill({ json: { ...fixture, run: { ...fixture.run, attempts: 4 } } });
       }
       if (mode === 'failure') return route.fulfill({ status: 503, json: { error: { message: '测试：MiMo 暂时不可用，请重试。' } } });
+      if (mode === 'exhausted') return route.fulfill({ status: 422, json: { error: { code: 'REPAIR_EXHAUSTED', message: '这次未能生成可用的房间，已停止调整。当前房间已保留，请重试或简化要求。' } } });
       if (mode === 'invalid') return route.fulfill({ json: { design: {}, run: fixture.run } });
       if (mode === 'bedroom') return route.fulfill({ json: bedroomFixture });
       if (mode === 'pending') { await new Promise(resolve => setTimeout(resolve, 800)); return route.fulfill({ json: fixture }).catch(() => {}); }
@@ -47,6 +49,8 @@ const bedroomFixture = { ...roomFromDesign(bedroomRoomDesign()), run: { ...fixtu
     const generate = () => page.getByRole('button', { name: '生成房间', exact: true }).click();
     const stored = () => page.evaluate(k => localStorage.getItem(k), key);
     await page.goto(base + '/room-3d'); await ready();
+    assert.equal(await page.locator('#room-agent-reference').isVisible(), false, 'The native empty-file message is hidden');
+    assert.equal(await page.getByRole('button', { name: '上传房间参考照片', exact: true }).isVisible(), true);
     assert.equal(await page.locator('.room-agent textarea').getAttribute('maxlength'), '2000');
     assert.equal(await page.getByRole('button', { name: '生成房间', exact: true }).isDisabled(), true);
     await page.getByRole('button', { name: '午后配色' }).click();
@@ -96,6 +100,11 @@ const bedroomFixture = { ...roomFromDesign(bedroomRoomDesign()), run: { ...fixtu
     assert.equal(await page.locator('.room-agent details').count(), 0, 'The editor has no limitations or more sections');
     assert.equal(await page.getByText(design.limitations[0], { exact: true }).count(), 0, 'Internal limitations stay out of the interface');
     assert.equal(await page.getByRole('button', { name: /导出方案|恢复默认/ }).count(), 0);
+    mode = 'exhausted'; await generate();
+    await page.getByRole('alert').filter({ hasText: '已停止调整' }).waitFor();
+    assert.equal(await progress.count(), 0, 'Exhausted repairs clear the busy indicator');
+    assert.equal(await page.getByRole('button', { name: '生成房间', exact: true }).isEnabled(), true);
+    assert.equal(await stored(), saved, 'Exhausted repairs retain the saved room');
     mode = 'failure'; await generate(); await page.getByRole('alert').filter({ hasText: '测试：MiMo' }).waitFor(); assert.equal(await stored(), saved);
     mode = 'invalid'; await generate(); await page.locator('.room-editor-preview .room3d-warning[role="alert"]').waitFor(); assert.equal(await stored(), saved);
     mode = 'pending'; await generate();
@@ -121,6 +130,45 @@ const bedroomFixture = { ...roomFromDesign(bedroomRoomDesign()), run: { ...fixtu
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.goto(base + '/room-3d?mode=recipient'); await ready(); assert.equal(await page.locator('.room-agent').count(), 0);
     await context.close();
+
+    // Virtual time verifies the total budget across multiple individually shorter requests.
+    const deadlineContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+    let releaseFirst, releaseSecond, firstStarted, secondStarted;
+    const firstGate = new Promise(resolve => { releaseFirst = resolve; }), secondGate = new Promise(resolve => { releaseSecond = resolve; });
+    const firstPending = new Promise(resolve => { firstStarted = resolve; }), secondPending = new Promise(resolve => { secondStarted = resolve; });
+    let cleanupCalls = 0;
+    try {
+      await deadlineContext.addInitScript(({ key, fixture }) => localStorage.setItem(key, JSON.stringify(fixture)), { key, fixture });
+      await deadlineContext.route('**/api/room-agent*', async route => {
+        if (route.request().method() === 'GET') return route.fulfill({ json: { configured: true } });
+        if (route.request().method() === 'DELETE') { cleanupCalls++; return route.fulfill({ json: { cancelled: true } }); }
+        if (!route.request().postDataJSON().generationId) {
+          firstStarted(); await firstGate;
+          return route.fulfill({ status: 202, json: { status: 'repairing', generationId, attempts: 1, message: '调整布局中…' } }).catch(() => {});
+        }
+        secondStarted(); await secondGate;
+        return route.fulfill({ json: fixture }).catch(() => {});
+      });
+      const deadlinePage = await deadlineContext.newPage();
+      deadlinePage.on('pageerror', e => errors.push(e.message));
+      await deadlinePage.clock.install();
+      await deadlinePage.goto(base + '/room-3d');
+      await deadlinePage.getByRole('button', { name: '午后配色' }).click();
+      await deadlinePage.getByRole('button', { name: '生成房间', exact: true }).click();
+      await firstPending;
+      await deadlinePage.clock.fastForward(100_000);
+      releaseFirst(); await secondPending;
+      await deadlinePage.clock.fastForward(ROOM_GENERATION_TIMEOUT_MS + 10_100 - 100_000);
+      await deadlinePage.getByRole('alert').filter({ hasText: '这次生成用时过长，已停止' }).waitFor();
+      assert.equal(await deadlinePage.getByRole('progressbar').count(), 0);
+      assert.equal(await deadlinePage.getByRole('button', { name: '生成房间', exact: true }).isEnabled(), true);
+      assert.deepEqual(await deadlinePage.evaluate(k => JSON.parse(localStorage.getItem(k)), key), fixture);
+      await deadlinePage.waitForTimeout(50);
+      assert.equal(cleanupCalls, 1, 'The total timeout cancels the server continuation');
+      await deadlinePage.screenshot({ path: '.room-qa/agent-timeout-desktop.png', fullPage: true });
+      await deadlinePage.setViewportSize({ width: 390, height: 844 });
+      await deadlinePage.screenshot({ path: '.room-qa/agent-timeout-mobile.png', fullPage: true });
+    } finally { releaseFirst(); releaseSecond(); await deadlineContext.close(); }
 
     const restricted = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await restricted.addInitScript(k => { const original = Storage.prototype.setItem; Storage.prototype.setItem = function(key, value) { if (key === k) throw new DOMException('quota', 'QuotaExceededError'); return original.call(this, key, value); }; }, key);
@@ -188,5 +236,6 @@ const bedroomFixture = { ...roomFromDesign(bedroomRoomDesign()), run: { ...fixtu
     console.log('PASS: generation, failure retention, malformed response, cancellation, persistence, simplified controls, gift interactions, mobile widths, recipient controls and storage failure');
     console.log('PASS: reference validation/preview/removal, image-only and text+image generation, photo failure retention, observations, no raw photo persistence and mobile layout');
     console.log('PASS: automatic multi-request repairs, live desktop/mobile progress, saved room retention, four-call results, reload and repair cancellation');
+    console.log('PASS: exhausted repairs and cross-request total timeout stop progress, restore retry, preserve saved rooms and release server sessions');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

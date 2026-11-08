@@ -6,7 +6,7 @@
 
 | 入口 | 责任 | 状态 |
 | --- | --- | --- |
-| `/`、`/gift/[step]` | 送礼与收礼的八页流程 | 编辑/探索使用 Three.js，编辑页接入房间 Agent |
+| `/`、`/gift/[step]` | 送礼与收礼的六页流程；制作直接进入编辑器 | 编辑/探索使用 Three.js，编辑页接入房间与宠物 Agent，旧 create/generating 跳转至 edit |
 | `/world-demo` | 独立 Phaser 房间 | 保留现有功能 |
 | `/room-3d` | Three.js 房间生成、物品特写、CD 播放 | 独立工作台，与主流程共用组件 |
 

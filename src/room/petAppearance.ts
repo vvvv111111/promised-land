@@ -1,3 +1,5 @@
+import { validatePetPhotoCoat, type PetPhotoCoat } from "./petPhotoCoat";
+
 export interface PetAppearance {
   pet: "cat" | "dog";
   color: string;
@@ -10,6 +12,7 @@ export interface PetAppearance {
 }
 
 export interface PetGenerationMetadata {
+  photoCoat?: PetPhotoCoat;
   appearanceChanged?: boolean;
   appearance?: PetAppearance;
   regionalPreset?: "BicolorWhite" | "SaddleWhiteChestLegs";
@@ -48,6 +51,11 @@ export function petGenerationMetadata(input: unknown, species: "cat" | "dog"): P
   if (preset?.name !== value.regionalPreset) throw new Error("宠物分区预设记录不匹配。");
   if (preset) result.regionalPreset = preset.name;
   if ((value.appearanceChanged === true && !result.appearance) || (value.appearanceChanged === false && result.appearance)) throw new Error("宠物毛色生成状态不一致。");
+  if (value.photoCoat !== undefined) {
+    validatePetPhotoCoat(value.photoCoat);
+    if (value.appearanceChanged !== true || !result.appearance) throw new Error("宠物照片毛色生成记录不一致。");
+    result.photoCoat = structuredClone(value.photoCoat);
+  }
   if (value.mappingLosses !== undefined) {
     if (!Array.isArray(value.mappingLosses) || value.mappingLosses.length > 20 || value.mappingLosses.some(s => typeof s !== "string" || !s.trim() || s.length > 500)) throw new Error("宠物外观差异记录无效。");
     result.mappingLosses = [...value.mappingLosses];

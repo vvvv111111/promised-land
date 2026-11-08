@@ -23,11 +23,9 @@ const cache = () => path.resolve(process.cwd(), ".pet-agent");
 export class PetAgentError extends Error { constructor(message: string, public status = 400) { super(message); } }
 
 export async function petAgentStatus() {
-  const libraryAvailable = existsSync(path.join(library(), "outputs/Pet_Model_Selection_Room/sources.json"));
+  const libraryAvailable = ["Pet_Model_Selection_Room", "Pet_Model_Selection"].some(name => existsSync(path.join(library(), "outputs", name, "sources.json")));
   const base = { libraryAvailable };
-  try { mimoConfig(); } catch { return { ...base, configured: false, message: "照片识别暂不可用；可以直接选择已有模型。" }; }
-  try { await access(path.join(library(), "outputs/Pet_Model_Selection/sources.json")); }
-  catch { return { ...base, configured: false, message: "宠物素材库尚未配置，请设置 PET_AGENT_LIBRARY。" }; }
+  try { mimoConfig(); } catch { return { ...base, configured: false, message: "宠物生成暂不可用，请检查 MiMo 配置。" }; }
   try { await exec(python(), ["-B", "-c", "import sys; assert sys.version_info >= (3, 10); from websockets.sync.client import connect"], { timeout: 10_000, windowsHide: true }); }
   catch { return { ...base, configured: false, message: "宠物生成需要 Python 3.10+ 和 requirements.txt 中的依赖。" }; }
   try { await access(process.env.PET_AGENT_CHROME || "C:/Program Files/Google/Chrome/Application/chrome.exe"); }
@@ -36,24 +34,9 @@ export async function petAgentStatus() {
     const { stdout } = await exec(python(), ["-B", "-X", "utf8", path.resolve("pet-recognition-generation/agent.py"), "--capabilities", "--library", library()], { timeout: 10_000, windowsHide: true });
     const capabilities = JSON.parse(stdout);
     if (typeof capabilities.primaryAvailable !== "boolean" || !Array.isArray(capabilities.regionalPresets) || capabilities.regionalPresets.some((p: unknown) => p !== "bicolor_white" && p !== "saddle_white") || (!capabilities.primaryAvailable && capabilities.regionalPresets.length)) throw Error("Invalid capabilities");
-    return { ...base, configured: true, primaryAvailable: capabilities.primaryAvailable, regionalPresets: capabilities.regionalPresets as string[], message: capabilities.primaryAvailable ? "" : "当前按照片匹配四款模型，保留模型原有毛色和静态姿态。" };
+    if (!capabilities.primaryAvailable && !libraryAvailable) throw Error("No pet assets");
+    return { ...base, configured: true, primaryAvailable: capabilities.primaryAvailable, regionalPresets: capabilities.regionalPresets as string[], photoCoatAvailable: capabilities.photoCoatAvailable === true, message: "" };
   } catch { return { ...base, configured: false, message: "宠物素材能力检查失败，请检查本地配置。" }; }
-}
-
-export async function selectLibraryPet(id: unknown): Promise<PetJobResult> {
-  if (typeof id !== "string" || !["cat", "kitten", "dog", "puppy"].includes(id)) throw new PetAgentError("请选择已有猫狗模型。");
-  const selection = path.join(library(), "outputs/Pet_Model_Selection_Room");
-  try {
-    const sources = JSON.parse(await readFile(path.join(selection, "sources.json"), "utf8"));
-    const asset = sources.find((row: { id: string }) => row.id === id);
-    const model = path.join(selection, id + ".glb");
-    if (!asset || (await stat(model)).size > MAX_PET_GLB_BYTES) throw Error("asset unavailable");
-    const bytes = await readFile(model);
-    const { createHash } = await import("node:crypto");
-    if (createHash("sha256").update(bytes).digest("hex") !== asset.sha256) throw Error("hash mismatch");
-    const glb = bytes.toString("base64"); decodePetGlb(glb);
-    return { species: id === "cat" || id === "kitten" ? "cat" : "dog", template: id, glb, appearanceChanged: false, source: asset.source, license: asset.license };
-  } catch { throw new PetAgentError("本地模型不可用，请先准备宠物素材库。", 503); }
 }
 
 function stopTree(child?: ChildProcess) {
@@ -117,7 +100,7 @@ async function runPetJob(job: RunningJob, image: string) {
     // Both template/fallback exporters supply a digest; verify before delivering.
     const { createHash } = await import("node:crypto");
     if (createHash("sha256").update(data).digest("hex") !== summary.sha256) throw new PetAgentError("宠物模型完整性校验失败。");
-    const metadata = petGenerationMetadata({ appearanceChanged: summary.appearance_changed, appearance: summary.params, regionalPreset: summary.regional_preset, mappingLosses: summary.mapping_losses }, summary.species);
+    const metadata = petGenerationMetadata({ appearanceChanged: summary.appearance_changed, appearance: summary.params, regionalPreset: summary.regional_preset, mappingLosses: summary.mapping_losses, photoCoat: summary.photo_coat }, summary.species);
     if (metadata.appearanceChanged !== (summary.status === "generated")) throw new PetAgentError("宠物生成记录与模型不一致。");
     job.result = { ...metadata, species: summary.species, glb, template: String(summary.template), appearanceChanged: metadata.appearanceChanged, ...(typeof summary.source === "string" ? { source: summary.source } : {}), ...(typeof summary.license === "string" ? { license: summary.license } : {}) };
     job.status = "succeeded";

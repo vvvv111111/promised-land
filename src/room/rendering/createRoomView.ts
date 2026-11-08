@@ -23,7 +23,6 @@ export function createRoomView(container: HTMLElement, options: {
   photo?: PhotoFrameContent;
   onReady: () => void;
   onOpen: (id: "sunset-frame" | "sealed-letter") => void;
-  onLamp: (on: boolean) => void;
   onAudioRequest: () => void;
   onError: (message?: string) => void;
   onFocusChange: (id: RoomObjectId | null) => void;
@@ -118,9 +117,9 @@ export function createRoomView(container: HTMLElement, options: {
   document.addEventListener("visibilitychange", onVisibility);
 
   function activate(id: RoomObjectId) {
+    if (id === "lamp") { model.toggleLamp(); requestRender(); return; }
     focus.focus(id);
-    if (id === "lamp") { options.onLamp(model.toggleLamp()); requestRender(); }
-    else if (id === "cd-player") options.onAudioRequest();
+    if (id === "cd-player") options.onAudioRequest();
     else options.onOpen(id);
   }
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();

@@ -53,7 +53,7 @@ const color = (v: unknown): string => {
 };
 
 /** Pick supported data only; generated assets are geometry recipes, never executable code. */
-export function parseRoomDesign(input: unknown): RoomDesign {
+export function parseRoomDesign(input: unknown, checkPlacements = true): RoomDesign {
   const data = object(input), palette = object(data.palette), light = object(data.lighting);
   if (data.version !== undefined && data.version !== 2) throw new Error("unsupported design version");
   const modern = data.version === 2;
@@ -81,7 +81,12 @@ export function parseRoomDesign(input: unknown): RoomDesign {
     const type = (modern ? item.type : item.id) as FurnitureId | "custom";
     if (!(modern && type === "custom") && !furnitureIds.includes(type as FurnitureId) || typeof item.id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(item.id) || ["shell", "cd", "envelope", "frame", "lamp"].includes(item.id) || seen.has(item.id)) throw new Error("unknown type or duplicate/reserved furniture id");
     seen.add(item.id as string);
-    const placement = { id: item.id, x: numeric(item.x, -dimensions[0] / 2, dimensions[0] / 2), z: numeric(item.z, -dimensions[2] / 2, dimensions[2] / 2), rotation: numeric(item.rotation, -Math.PI, Math.PI) };
+    // Coordinates are placement errors, not a broken schema: local patches can correct them.
+    const coordinate = (axis: "x" | "z", half: number) => {
+      try { return numeric(item[axis], checkPlacements ? -half : -12, checkPlacements ? half : 12); }
+      catch { throw new Error(`${item.id}.${axis}=${String(item[axis]).slice(0, 40)} must be a finite coordinate in ${checkPlacements ? `-${half}..${half}` : "-12..12"}m; use the furniture center or parent-local coordinate`); }
+    };
+    const placement = { id: item.id, x: coordinate("x", dimensions[0] / 2), z: coordinate("z", dimensions[2] / 2), rotation: numeric(item.rotation, -Math.PI, Math.PI) };
     let support: Pick<DesignFurniture, "parent" | "surface"> = {};
     if (modern && (item.parent !== undefined || item.surface !== undefined)) {
       for (const id of [item.parent, item.surface]) if (typeof id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(id)) throw new Error("parent and surface must both name real furniture/supports");
@@ -109,7 +114,7 @@ export function parseRoomDesign(input: unknown): RoomDesign {
     return { ...placement, ...(modern ? { type, size: item.size === undefined ? furnitureSize(type as FurnitureId) : validateFurnitureSize(type as FurnitureId, item.size), ...(item.colors === undefined ? {} : { colors }), ...support } : {}) };
   });
   if (furniture.reduce((count, n) => count + (n.type === "custom" ? assets[n.asset!].parts.length : 0), 0) > MAX_GENERATED_PARTS) throw new Error("generated room exceeds 384 instantiated parts; simplify detail, preserve major structure");
-  if (!furniture.some(n => ["desk", "table", "cabinet", ...(modern ? ["dining-table", "nightstand"] : [])].includes(n.type ?? n.id) || n.type === "custom" && assets[n.asset!].supports?.length)) throw new Error("include real supporting furniture/surfaces for the CD player, letter and lamp");
+  if (!furniture.some(n => ["desk", "table", "cabinet", ...(modern ? ["dining-table", "nightstand", "bookshelf", "wardrobe"] : [])].includes(n.type ?? n.id) || n.type === "custom" && assets[n.asset!].supports?.length)) throw new Error("include real supporting furniture/surfaces for the CD player, letter and lamp");
   const design: RoomDesign = {
     ...(modern ? { version: 2 as const, dimensions } : {}),
     summary: text(data.summary, 240), limitations: data.limitations.map(v => text(v, 160)),
@@ -119,7 +124,7 @@ export function parseRoomDesign(input: unknown): RoomDesign {
     ...(modern ? { architecture: parseArchitecture({ ...object(data.architecture ?? { windows: [] }), units: "meters" }, dimensions) } : data.architecture === undefined ? {} : { architecture: parseArchitecture(data.architecture) }),
     lighting: { sunColor: color(light.sunColor), intensity: numeric(light.intensity, .5, 5), ambient: numeric(light.ambient, .5, 3), exposure: numeric(light.exposure, .7, 1.5) },
   };
-  validatePlacements(design);
+  if (checkPlacements) validatePlacements(design);
   return design;
 }
 

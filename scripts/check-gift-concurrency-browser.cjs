@@ -51,12 +51,41 @@ const editLetter = async (p, body) => {
     persisted = await b.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
     assert.equal(persisted.object_contents['sealed-letter'].body, 'first tab saved');
     assert.deepEqual(persisted.room, fixture.definition);
+    // Inline metadata saves merge with newer room/photo/letter edits across tabs.
+    await a.locator('.winter-gift-details > summary').click();
+    await b.locator('.winter-gift-details > summary').click();
+    await a.getByRole('textbox', { name: '送给谁', exact: true }).fill('recipient');
+    await a.getByRole('button', { name: '保存信息', exact: true }).click();
+    await a.locator('.winter-gift-details [role=status]').getByText('已保存', { exact: true }).waitFor();
+    await b.getByRole('textbox', { name: '共同的回忆', exact: true }).fill('shared memory');
+    await b.getByRole('button', { name: '保存信息', exact: true }).click();
+    await b.locator('.winter-gift-details [role=status]').getByText('已保存', { exact: true }).waitFor();
+    const combined = await b.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
+    assert.equal(combined.details.recipient, 'recipient');
+    assert.equal(combined.details.memory, 'shared memory');
+    assert.deepEqual(combined.room, persisted.room);
+    assert.deepEqual(combined.object_contents, persisted.object_contents);
+    await a.getByRole('textbox', { name: '共同的回忆', exact: true }).fill('stale memory');
+    await a.getByRole('button', { name: '保存信息', exact: true }).click();
+    await a.locator('.winter-gift-details').getByRole('alert').filter({ hasText: '其他页面更新' }).waitFor();
+    assert.equal(await a.getByRole('textbox', { name: '共同的回忆', exact: true }).inputValue(), 'stale memory');
+    await a.getByRole('link', { name: '返回首页', exact: true }).click();
+    assert.ok(a.url().includes('/gift/edit?'));
+    assert.equal(await a.getByRole('link', { name: '完成', exact: true }).getAttribute('aria-disabled'), 'true');
     // Quota failure keeps the complete old room and contents, and blocks completion.
     const previous = await b.evaluate(key => localStorage.getItem(key), key);
     await b.evaluate(key => {
       const set = Storage.prototype.setItem;
       Storage.prototype.setItem = function(k, v) { if (k === key) throw new DOMException('quota', 'QuotaExceededError'); return set.call(this, k, v); };
     }, key);
+    await b.getByRole('textbox', { name: '共同的回忆', exact: true }).fill('quota memory');
+    await b.getByRole('button', { name: '保存信息', exact: true }).click();
+    await b.locator('.winter-gift-details').getByRole('alert').filter({ hasText: '保存失败' }).waitFor();
+    assert.equal(await b.getByRole('textbox', { name: '共同的回忆', exact: true }).inputValue(), 'quota memory');
+    assert.equal(await b.evaluate(key => localStorage.getItem(key), key), previous);
+    assert.equal(await b.getByRole('link', { name: '完成', exact: true }).getAttribute('aria-disabled'), 'true');
+    await b.getByRole('textbox', { name: '共同的回忆', exact: true }).fill('shared memory');
+    await b.locator('.winter-gift-details > summary').click();
     await b.getByRole('button', { name: '生成房间', exact: true }).click();
     await b.waitForFunction(() => document.querySelector('.room-editor-savebar button')?.disabled === false);
     await b.getByRole('button', { name: '保存', exact: true }).click();
