@@ -29,6 +29,11 @@ export default function GiftExperience({ step, giftId = WINTER_GIFT_ID }: { step
   const [roomSaved, setRoomSaved] = useState(true);
   const [detailsSaved, setDetailsSaved] = useState(true);
   const canLeave = roomSaved && detailsSaved;
+  function requireSaved(event: { preventDefault: () => void }) {
+    if (canLeave) return;
+    event.preventDefault();
+    setNotice("请先保存或撤销房间与宠物的更改，并保存礼物信息，再继续。正在进行的任务请先等待完成或取消。");
+  }
   const music = useGiftMusic();
   const recipient = ["open", "room", "story"].includes(step);
   useEffect(() => {
@@ -69,7 +74,7 @@ export default function GiftExperience({ step, giftId = WINTER_GIFT_ID }: { step
   return (
     <main className={`winter-app winter-${step}`}>
       <header className="winter-header">
-        <Link href="/" className="winter-brand" onClick={e => { if (step === "edit" && !canLeave) e.preventDefault(); }}><span>应许之地<small lang="en">promised land</small></span></Link>
+        <a href="/" className="winter-brand"><span>应许之地<small lang="en">promised land</small></span></a>
         <nav aria-label="主导航">
           <button className="winter-music" aria-label={music.playing ? "暂停音乐" : "播放音乐"} aria-pressed={music.playing} onClick={music.toggle}>
             <Icon name={music.playing ? "pause" : "music"} size={18} />{music.playing ? "暂停音乐" : "播放音乐"}
@@ -80,8 +85,8 @@ export default function GiftExperience({ step, giftId = WINTER_GIFT_ID }: { step
       <div className="winter-content">
         {(step === "edit" || step === "room") && <section className="winter-room-layout">
           <div className="winter-room-heading">
-            <div><Link className="winter-back" href={step === "edit" ? "/" : href("open")} onClick={e => { if (step === "edit" && !canLeave) e.preventDefault(); }}>{step === "edit" ? "返回首页" : "返回水晶球"}</Link><h1>{step === "edit" ? "编辑礼物" : "查看礼物"}</h1><p className="winter-page-note">{step === "edit" ? "点击相框或信件编辑。" : "点击物品，查看照片和信件。"}</p></div>
-            {step === "edit" && <div className="winter-room-actions"><Link className="winter-secondary" href={href("open")} aria-disabled={!canLeave} onClick={e => { if (!canLeave) e.preventDefault(); }}>预览</Link><Link className="winter-primary" href={href("complete")} aria-disabled={!canLeave} onClick={e => { if (!canLeave) e.preventDefault(); }}>完成</Link></div>}
+            <div>{step === "edit" ? <a className="winter-back" href="/">返回首页</a> : <Link className="winter-back" href={href("open")}>返回水晶球</Link>}<h1>{step === "edit" ? "编辑礼物" : "查看礼物"}</h1><p className="winter-page-note">{step === "edit" ? "点击相框或信件编辑。" : "点击物品，查看照片和信件。"}</p></div>
+            {step === "edit" && <div className="winter-room-actions"><Link className="winter-secondary" href={href("open")} aria-disabled={!canLeave} onNavigate={requireSaved}>预览</Link><Link className="winter-primary" href={href("complete")} aria-disabled={!canLeave} onNavigate={requireSaved}>完成</Link></div>}
           </div>
           <GiftRoom recipient={step === "room"} giftId={giftId} collected={collected} onCollect={collect} onSaveStateChange={setRoomSaved} onAudioPlaying={playing => { if (playing) music.stop(); }} backgroundPlaying={music.playing} />
           {step === "edit" && <GiftDetailsEditor giftId={giftId} onSaveStateChange={setDetailsSaved} />}
